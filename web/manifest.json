@@ -1,0 +1,34 @@
+{
+  "name": "Bitcoin Silver Web Wallet",
+  "short_name": "BTCS Wallet",
+  "description": "Simple, secure, decentralized Bitcoin Silver web wallet",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0A0A0A",
+  "theme_color": "#C0C0C0",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "icons/Icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/Icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/Icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/Icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
