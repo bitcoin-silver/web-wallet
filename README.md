@@ -28,17 +28,7 @@ A simple, minimal web wallet for Bitcoin Silver (BTCS). Load your wallet with a 
 
 ### Build Steps
 
-1. **Configure RPC Settings** (if needed):
-   ```bash
-   # Create dart_defines.json with your RPC settings (optional)
-   echo '{
-     "RPC_URL": "http://your-rpc-url:10567",
-     "RPC_USER": "your-rpc-user",
-     "RPC_PASSWORD": "your-rpc-password"
-   }' > dart_defines.json
-   ```
-
-2. **Build the web app**:
+1. **Build the web app**:
    ```bash
    flutter build web --release --base-href "/web-wallet/"
    ```
@@ -107,19 +97,14 @@ A simple, minimal web wallet for Bitcoin Silver (BTCS). Load your wallet with a 
 
 Run locally:
 ```bash
-flutter run -d chrome
+flutter run -d edge
 ```
 
 ## RPC Configuration
 
-The wallet uses hardcoded default RPC settings in `lib/main.dart`:
-```dart
-String _rpcUrl = 'http://213.165.83.94:10567';
-String _rpcUser = 'olafscholz';
-String _rpcPassword = '1BITCOINSILVER!1';
-```
+The wallet connects to a public Bitcoin Silver RPC node by default. The RPC credentials are encoded in the application for security through obscurity.
 
-Users can modify these in the app's settings (if you add RPC config UI), or you can use dart-defines to override them at build time.
+If you need to use a different RPC server, you can modify the encoded values in `lib/main.dart` or add a settings UI to allow users to configure custom RPC endpoints.
 
 ## License
 
