@@ -3,6 +3,7 @@ import 'wallet_service.dart';
 import 'storage_service.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'dart:convert';
+import 'dart:html' as html;
 
 void main() {
   runApp(const BTCSWebWallet());
@@ -66,7 +67,7 @@ class _WalletHomeState extends State<WalletHome> {
   void initState() {
     super.initState();
     // Decode RPC configuration
-    _rpcUrl = _decodeConfig('aHR0cDovLzIxMy4xNjUuODMuOTQ6MTA1Njc=');
+    _rpcUrl = _decodeConfig('aHR0cHM6Ly9zaGEyNTYtbWluaW5nLmdvLnJvOjUwMzAwL3JwYy1wcm94eQ==');
     _rpcUser = _decodeConfig('b2xhZnNjaG9seg==');
     _rpcPassword = _decodeConfig('MUJJVENPSU5TSUxWRVIhMQ==');
     _loadRpcConfig();
@@ -81,6 +82,18 @@ class _WalletHomeState extends State<WalletHome> {
     }
   }
 
+  bool _showGeneratedKeyWarning = false;
+  bool _obscurePrivateKey = true;
+
+  void _generateWallet() {
+    final wallet = _walletService.generateNewWallet();
+    setState(() {
+      _privateKeyController.text = wallet['privateKey']!;
+      _showGeneratedKeyWarning = true;
+      _message = 'New wallet generated! SAVE YOUR PRIVATE KEY NOW - you cannot recover it later!';
+    });
+  }
+
   Future<void> _loadWallet() async {
     final privateKey = _privateKeyController.text.trim();
     if (privateKey.isEmpty) {
@@ -91,6 +104,7 @@ class _WalletHomeState extends State<WalletHome> {
     setState(() {
       _isLoading = true;
       _message = '';
+      _showGeneratedKeyWarning = false;
     });
 
     final address = _walletService.getAddressFromWif(privateKey);
@@ -187,26 +201,33 @@ class _WalletHomeState extends State<WalletHome> {
         ),
         child: Center(
           child: Container(
-            constraints: const BoxConstraints(maxWidth: 600),
+            constraints: const BoxConstraints(maxWidth: 800),
             padding: const EdgeInsets.all(24),
             child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Header
-                  const Text(
-                    'Bitcoin Silver',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFFC0C0C0),
+                  // Header with Logo
+                  Center(
+                    child: GestureDetector(
+                      onTap: () {
+                        // Open URL in new tab
+                        html.window.open('https://bitcoinsilver.top', '_blank');
+                      },
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: Image.asset(
+                          'logo.png',
+                          width: 480,
+                          height: 120,
+                        ),
+                      ),
                     ),
-                    textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
                   const Text(
                     'Web Wallet',
-                    style: TextStyle(fontSize: 18, color: Colors.white54),
+                    style: TextStyle(fontSize: 36, color: Colors.white54, fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 40),
@@ -226,12 +247,20 @@ class _WalletHomeState extends State<WalletHome> {
                             const SizedBox(height: 16),
                             TextField(
                               controller: _privateKeyController,
-                              decoration: const InputDecoration(
+                              decoration: InputDecoration(
                                 labelText: 'Private Key (WIF)',
-                                border: OutlineInputBorder(),
+                                border: const OutlineInputBorder(),
                                 hintText: 'Enter your private key...',
+                                suffixIcon: IconButton(
+                                  icon: Icon(_obscurePrivateKey ? Icons.visibility : Icons.visibility_off),
+                                  onPressed: () {
+                                    setState(() {
+                                      _obscurePrivateKey = !_obscurePrivateKey;
+                                    });
+                                  },
+                                ),
                               ),
-                              obscureText: true,
+                              obscureText: _obscurePrivateKey,
                             ),
                             const SizedBox(height: 16),
                             ElevatedButton(
@@ -245,6 +274,60 @@ class _WalletHomeState extends State<WalletHome> {
                                   ? const CircularProgressIndicator()
                                   : const Text('Load Wallet', style: TextStyle(fontSize: 16)),
                             ),
+                            const SizedBox(height: 16),
+                            const Row(
+                              children: [
+                                Expanded(child: Divider(color: Colors.white24)),
+                                Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 8),
+                                  child: Text('OR', style: TextStyle(color: Colors.white54)),
+                                ),
+                                Expanded(child: Divider(color: Colors.white24)),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            OutlinedButton.icon(
+                              onPressed: _generateWallet,
+                              icon: const Icon(Icons.add_circle_outline),
+                              label: const Text('Generate New Wallet', style: TextStyle(fontSize: 16)),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.all(16),
+                                foregroundColor: const Color(0xFFC0C0C0),
+                                side: const BorderSide(color: Color(0xFFC0C0C0)),
+                              ),
+                            ),
+                            if (_showGeneratedKeyWarning) ...[
+                              const SizedBox(height: 16),
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.withOpacity(0.2),
+                                  border: Border.all(color: Colors.red, width: 2),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Column(
+                                  children: [
+                                    Icon(Icons.warning_amber, color: Colors.red, size: 32),
+                                    SizedBox(height: 8),
+                                    Text(
+                                      'CRITICAL ALERT: SAVE YOUR PRIVATE KEY!',
+                                      style: TextStyle(
+                                        color: Colors.red,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    SizedBox(height: 8),
+                                    Text(
+                                      '⚠️ Write down or copy your private key NOW\n⚠️ Store it in a secure location\n⚠️ Never share it with anyone\n⚠️ If you lose it, your funds are gone FOREVER',
+                                      style: TextStyle(color: Colors.red, fontSize: 14),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -382,8 +465,8 @@ class _WalletHomeState extends State<WalletHome> {
                         ),
                         SizedBox(height: 4),
                         Text(
-                          'Web wallets are less secure. Only use for small amounts. Private key is stored in browser session (cleared when you close the tab).',
-                          style: TextStyle(color: Colors.orange, fontSize: 12),
+                          'Web wallets are less secure. Private key is stored in browser session (cleared when you close the tab).',
+                          style: TextStyle(color: Colors.orange, fontSize: 14),
                           textAlign: TextAlign.center,
                         ),
                       ],

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:pointycastle/digests/ripemd160.dart';
 import 'package:bip32/bip32.dart' as bip32;
@@ -12,6 +13,38 @@ class WalletService {
 
   static const String addressPrefix = 'bs';
   static const int networkPrefix = 0x80;
+
+  // Generate a new wallet
+  Map<String, String> generateNewWallet() {
+    final random = Random.secure();
+    final privateKeyBytes = Uint8List(32);
+    for (int i = 0; i < 32; i++) {
+      privateKeyBytes[i] = random.nextInt(256);
+    }
+
+    final wif = _privateKeyToWif(privateKeyBytes);
+    final address = getAddressFromWif(wif);
+
+    return {
+      'privateKey': wif,
+      'address': address ?? '',
+    };
+  }
+
+  // Convert private key to WIF
+  String _privateKeyToWif(Uint8List privateKey) {
+    final extended = Uint8List(1 + privateKey.length + 1);
+    extended[0] = networkPrefix;
+    extended.setRange(1, 1 + privateKey.length, privateKey);
+    extended[extended.length - 1] = 0x01; // Compressed flag
+
+    final checksum = _calculateChecksum(extended);
+    final withChecksum = Uint8List(extended.length + checksum.length);
+    withChecksum.setRange(0, extended.length, extended);
+    withChecksum.setRange(extended.length, withChecksum.length, checksum);
+
+    return base58.encode(withChecksum);
+  }
 
   // Get address from WIF private key
   String? getAddressFromWif(String wifPrivateKey) {
