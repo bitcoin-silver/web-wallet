@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="/">
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Bitcoin Silver Web Wallet - Simple, secure, decentralized">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="BTCS Wallet">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Bitcoin Silver Web Wallet</title>
+
+  <link rel="manifest" href="manifest.json">
+
+  <style>
+    body {
+      margin: 0;
+      background: #0A0A0A;
+      color: white;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+    .loading {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      flex-direction: column;
+    }
+    .spinner {
+      border: 4px solid #1A1A1A;
+      border-top: 4px solid #C0C0C0;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="loading">
+    <div class="spinner"></div>
+    <p style="margin-top: 20px; color: #C0C0C0;">Loading Bitcoin Silver Wallet...</p>
+  </div>
+
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
