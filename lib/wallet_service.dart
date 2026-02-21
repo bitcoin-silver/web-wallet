@@ -198,7 +198,7 @@ class WalletService {
     final utxos = await getUtxos(rpcUrl, rpcUser, rpcPassword, fromAddress);
 
     if (utxos.isEmpty) {
-      return {'success': false, 'message': 'No confirmed UTXOs available'};
+      return {'success': false, 'message': 'No confirmed funds available. Please wait approximately 15 minutes for your deposit to confirm.'};
     }
 
     // Sort by amount (largest first)
@@ -238,7 +238,7 @@ class WalletService {
         );
 
         if (createResult == null || createResult['result'] == null) {
-          return {'success': false, 'message': 'Failed to create transaction'};
+          return {'success': false, 'message': 'Unable to create transaction. Please try again or contact support.'};
         }
 
         // Sign transaction
@@ -249,11 +249,11 @@ class WalletService {
         );
 
         if (signResult == null || signResult['result'] == null) {
-          return {'success': false, 'message': 'Failed to sign transaction'};
+          return {'success': false, 'message': 'Unable to sign transaction with your private key. Please verify your wallet is loaded correctly.'};
         }
 
         if (!signResult['result']['complete']) {
-          return {'success': false, 'message': 'Transaction signature incomplete'};
+          return {'success': false, 'message': 'Transaction could not be fully signed. Please check your wallet and try again.'};
         }
 
         // Send transaction
@@ -272,13 +272,17 @@ class WalletService {
         }
 
         final errorMessage = sendResult?['error']?['message'] ?? 'Unknown error';
+        // Check for common errors and provide better messages
+        if (errorMessage.contains('insufficient fee') || errorMessage.contains('rejecting replacement')) {
+          return {'success': false, 'message': 'You have a pending transaction. Please wait approximately 15 minutes before sending another transaction.'};
+        }
         return {'success': false, 'message': errorMessage};
       }
     }
 
     return {
       'success': false,
-      'message': 'Insufficient funds. Available: ${inputSum.toStringAsFixed(8)} BTCS'
+      'message': 'Insufficient funds. Available balance: ${inputSum.toStringAsFixed(8)} BTCS. If you have recent deposits, please wait approximately 15 minutes for confirmation.'
     };
   }
 

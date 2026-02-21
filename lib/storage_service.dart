@@ -1,7 +1,6 @@
-import 'dart:html' as html;
+import 'package:web/web.dart' as web;
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
-import 'dart:typed_data';
 
 class StorageService {
   static const String _keyPrefix = 'btcs_';
@@ -34,12 +33,12 @@ class StorageService {
   // Save wallet (encrypted)
   void saveWallet(String privateKey, String password) {
     final encrypted = _encrypt(privateKey, password);
-    html.window.localStorage['${_keyPrefix}wallet'] = encrypted;
+    web.window.localStorage.setItem('${_keyPrefix}wallet', encrypted);
   }
 
   // Load wallet (decrypt)
   String? loadWallet(String password) {
-    final encrypted = html.window.localStorage['${_keyPrefix}wallet'];
+    final encrypted = web.window.localStorage.getItem('${_keyPrefix}wallet');
     if (encrypted == null) return null;
 
     try {
@@ -51,12 +50,12 @@ class StorageService {
 
   // Check if wallet exists
   bool hasWallet() {
-    return html.window.localStorage['${_keyPrefix}wallet'] != null;
+    return web.window.localStorage.getItem('${_keyPrefix}wallet') != null;
   }
 
   // Delete wallet
   void deleteWallet() {
-    html.window.localStorage.remove('${_keyPrefix}wallet');
+    web.window.localStorage.removeItem('${_keyPrefix}wallet');
   }
 
   // Save RPC config
@@ -66,12 +65,12 @@ class StorageService {
       'user': user,
       'password': password,
     });
-    html.window.localStorage['${_keyPrefix}rpc'] = config;
+    web.window.localStorage.setItem('${_keyPrefix}rpc', config);
   }
 
   // Load RPC config
   Map<String, String>? loadRpcConfig() {
-    final config = html.window.localStorage['${_keyPrefix}rpc'];
+    final config = web.window.localStorage.getItem('${_keyPrefix}rpc');
     if (config == null) return null;
 
     try {
@@ -88,14 +87,14 @@ class StorageService {
 
   // Session storage (cleared when browser closes)
   void saveSession(String privateKey) {
-    html.window.sessionStorage['${_keyPrefix}session'] = privateKey;
+    web.window.sessionStorage.setItem('${_keyPrefix}session', privateKey);
   }
 
   String? loadSession() {
-    return html.window.sessionStorage['${_keyPrefix}session'];
+    return web.window.sessionStorage.getItem('${_keyPrefix}session');
   }
 
   void clearSession() {
-    html.window.sessionStorage.remove('${_keyPrefix}session');
+    web.window.sessionStorage.removeItem('${_keyPrefix}session');
   }
 }

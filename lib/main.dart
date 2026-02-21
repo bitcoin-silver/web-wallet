@@ -3,7 +3,7 @@ import 'wallet_service.dart';
 import 'storage_service.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'dart:convert';
-import 'dart:html' as html;
+import 'package:web/web.dart' as web;
 
 void main() {
   runApp(const BTCSWebWallet());
@@ -25,7 +25,6 @@ class BTCSWebWallet extends StatelessWidget {
           primary: const Color(0xFFC0C0C0),
           secondary: const Color(0xFF00E5FF),
           surface: const Color(0xFF1A1A1A),
-          background: const Color(0xFF0A0A0A),
         ),
       ),
       home: const WalletHome(),
@@ -45,7 +44,6 @@ class _WalletHomeState extends State<WalletHome> {
   final StorageService _storage = StorageService();
 
   final TextEditingController _privateKeyController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _toAddressController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
 
@@ -66,10 +64,10 @@ class _WalletHomeState extends State<WalletHome> {
   @override
   void initState() {
     super.initState();
-    // Decode RPC configuration
-    _rpcUrl = _decodeConfig('aHR0cHM6Ly9zaGEyNTYtbWluaW5nLmdvLnJvOjUwMzAwL3JwYy1wcm94eQ==');
-    _rpcUser = _decodeConfig('b2xhZnNjaG9seg==');
-    _rpcPassword = _decodeConfig('MUJJVENPSU5TSUxWRVIhMQ==');
+    // New RPC Server Configuration (from btcs-vps13.duckdns.org)
+    _rpcUrl = _decodeConfig('aHR0cHM6Ly9idGNzLXZwczEzLmR1Y2tkbnMub3JnL2J0Y3NycGM=');
+    _rpcUser = _decodeConfig('YnRjc3JwY19lMjA3N2Y4N2FkYzM=');
+    _rpcPassword = _decodeConfig('WTBqVU94SUxaMTF5MkZwSldWU3MyTU1sZGpGL2dFSFdJVFEyTUpUNm1PWT0=');
     _loadRpcConfig();
   }
 
@@ -90,14 +88,14 @@ class _WalletHomeState extends State<WalletHome> {
     setState(() {
       _privateKeyController.text = wallet['privateKey']!;
       _showGeneratedKeyWarning = true;
-      _message = 'New wallet generated! SAVE YOUR PRIVATE KEY NOW - you cannot recover it later!';
+      _message = '✅ New wallet created! Please save your private key in a secure location.';
     });
   }
 
   Future<void> _loadWallet() async {
     final privateKey = _privateKeyController.text.trim();
     if (privateKey.isEmpty) {
-      setState(() => _message = 'Please enter private key');
+      setState(() => _message = '⚠️ Please enter your private key to continue');
       return;
     }
 
@@ -111,7 +109,7 @@ class _WalletHomeState extends State<WalletHome> {
     if (address == null) {
       setState(() {
         _isLoading = false;
-        _message = 'Invalid private key';
+        _message = '❌ Private key is not valid. Please check and try again.';
       });
       return;
     }
@@ -124,7 +122,7 @@ class _WalletHomeState extends State<WalletHome> {
       _address = address;
       _balance = balance;
       _isLoading = false;
-      _message = 'Wallet loaded successfully!';
+      _message = '✅ Wallet loaded successfully! Your balance is now displayed.';
     });
 
     // Save to session
@@ -133,7 +131,7 @@ class _WalletHomeState extends State<WalletHome> {
 
   Future<void> _sendTransaction() async {
     if (_address == null) {
-      setState(() => _message = 'Please load wallet first');
+      setState(() => _message = '⚠️ Please load your wallet before sending transactions');
       return;
     }
 
@@ -141,20 +139,20 @@ class _WalletHomeState extends State<WalletHome> {
     final amount = double.tryParse(_amountController.text);
 
     if (toAddress.isEmpty || amount == null || amount <= 0) {
-      setState(() => _message = 'Invalid address or amount');
+      setState(() => _message = '⚠️ Please enter a valid recipient address and amount');
       return;
     }
 
     setState(() {
       _isLoading = true;
-      _message = 'Sending transaction...';
+      _message = '⏳ Sending your transaction... Please wait.';
     });
 
     final privateKey = _storage.loadSession();
     if (privateKey == null) {
       setState(() {
         _isLoading = false;
-        _message = 'Session expired, please reload wallet';
+        _message = '⚠️ Your session has expired. Please reload your wallet to continue.';
       });
       return;
     }
@@ -172,13 +170,14 @@ class _WalletHomeState extends State<WalletHome> {
     setState(() {
       _isLoading = false;
       if (result['success']) {
-        _message = 'Transaction sent! TXID: ${result['txid']}';
+        _message = '✅ Transaction sent successfully! TXID: ${result['txid']}';
         _toAddressController.clear();
         _amountController.clear();
-        // Refresh balance
-        _loadWallet();
+        // Subtract amount and fee from balance immediately
+       final fee = result['fee'] as double? ?? 0.0;
+       _balance = _balance - amount - fee;
       } else {
-        _message = 'Error: ${result['message']}';
+        _message = '❌ ${result['message']}';
       }
     });
   }
@@ -212,7 +211,7 @@ class _WalletHomeState extends State<WalletHome> {
                     child: GestureDetector(
                       onTap: () {
                         // Open URL in new tab
-                        html.window.open('https://bitcoinsilver.top', '_blank');
+                        web.window.open('https://bitcoinsilver.top', '_blank');
                       },
                       child: MouseRegion(
                         cursor: SystemMouseCursors.click,
@@ -301,7 +300,7 @@ class _WalletHomeState extends State<WalletHome> {
                               Container(
                                 padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
-                                  color: Colors.red.withOpacity(0.2),
+                                  color: Colors.red.withValues(alpha: 0.2),
                                   border: Border.all(color: Colors.red, width: 2),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
@@ -431,8 +430,8 @@ class _WalletHomeState extends State<WalletHome> {
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: _message.contains('Error') || _message.contains('Invalid')
-                            ? Colors.red.withOpacity(0.2)
-                            : Colors.green.withOpacity(0.2),
+                            ? Colors.red.withValues(alpha: 0.2)
+                            : Colors.green.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
@@ -452,7 +451,7 @@ class _WalletHomeState extends State<WalletHome> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.2),
+                      color: Colors.orange.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Column(
