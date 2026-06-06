@@ -1,5 +1,5 @@
-name: s256_web_wallet
-description: Simple S256 coin web wallet - Load, Send, Receive
+name: btcs_web_wallet
+description: Simple Bitcoin Silver coin web wallet - Load, Send, Receive
 publish_to: 'none'
 version: 1.0.0
 

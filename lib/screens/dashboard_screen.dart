@@ -293,7 +293,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               style: const TextStyle(color: Colors.white70, fontSize: 14),
             ),
             const Text(
-              'Note: You have unconfirmed transactions. Please wait ~20 min for a block.',
+              'Note: You have unconfirmed transactions. Please wait ~10 min for a block.',
               style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
             ),
           ],

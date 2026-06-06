@@ -3,7 +3,7 @@
 A modern, secure, and modular web wallet for BitcoinSilver (BTCS). This release provides improved architecture, seed phrase support, and safer RPC communication for web deployment.
 
 <p align="center">
-  <img src="assets/logo.png" alt="BitcoinSilver Web-Wallet" width="128">
+  <img src="assets/logo.png" alt="BitcoinSilver Web-Wallet" width="600">
 </p>
 
 <p align="center">
@@ -38,7 +38,7 @@ A unique tool to help legacy users upgrade to modern security:
 - **Forced Backup**: Automatically prompts the user to secure their new keys post-migration.
 
 ### 📊 Real-time Network Info
-A new dashboard to monitor the S256 network health directly within the wallet:
+A new dashboard to monitor the BTCS network health directly within the wallet:
 - **Blockchain Stats**: Height, Difficulty, and Median Time.
 - **Mempool Metrics**: Pending transaction count and size.
 - **Mining Data**: Global network hashrate with automatic unit conversion (GH/s, TH/s).
