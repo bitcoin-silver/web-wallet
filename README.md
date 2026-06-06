@@ -1,19 +1,19 @@
-# S256 Coin Web Wallet v2.0
+# BitcoinSilver Web Wallet v2.0
 
-A modern, secure, and modular web wallet for S256 coin. This version introduces significant architectural improvements, seed phrase support, and a built-in migration tool.
+A modern, secure, and modular web wallet for BitcoinSilver (BTCS). This release provides improved architecture, seed phrase support, and safer RPC communication for web deployment.
 
 <p align="center">
-  <img src="assets/s256_brand.png" alt="S256 Web-Wallet" width="128">
+  <img src="assets/logo.png" alt="BitcoinSilver Web-Wallet" width="128">
 </p>
 
 <p align="center">
-  <strong>The Official Web Wallet for SHA256coin (S256)</strong><br>
+  <strong>The Official Web Wallet for BitcoinSilver (BTCS)</strong><br>
   Built with Flutter for Web
 </p>
 
 <p align="center">
-  <a href="https://sha256coin.eu">Website</a> •
-  <a href="https://explorer.sha256coin.eu">Explorer</a>
+  <a href="https://bitcoinsilver.top">Website</a> •
+  <a href="https://explorer.bitcoinsilver.top">Explorer</a>
 </p>
 
 ## Major Updates in v2.0
@@ -62,7 +62,7 @@ A new dashboard to monitor the S256 network health directly within the wallet:
 
 - Private keys exist ONLY in memory during your active session.
 - Closing the tab or refreshing the page logs you out instantly.
-- Always verify the URL is `sha256coin.eu`.
+- Always verify the URL is `https://bitcoinsilver.top`.
 - For large amounts, always use a desktop or hardware wallet.
 
 ## Development
@@ -81,7 +81,13 @@ flutter build web --release --base-href "/web-wallet/"
 
 ## RPC Configuration
 
-The wallet connects to the public S256 RPC proxy at `https://sha256coin.eu/rpc`. The proxy handles CORS and restricts allowed RPC methods to ensure network security.
+The wallet uses an RPC proxy to communicate with BitcoinSilver nodes. By default the project expects a secure proxy endpoint such as `https://btcs-vps13.duckdns.org/btcs-rpc` (or your own proxy). The proxy must:
+
+- Serve over HTTPS.
+- Return a single `Access-Control-Allow-Origin` header matching `https://bitcoinsilver.top` (or the origin you host the wallet from).
+- Handle preflight `OPTIONS` requests and forward POST JSON-RPC payloads to an upstream node.
+
+If you run the proxy with nginx, use `proxy_hide_header` to avoid duplicate CORS headers and add a single `Access-Control-Allow-Origin` header as shown in the project docs.
 
 ## License
 

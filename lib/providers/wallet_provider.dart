@@ -13,7 +13,7 @@ class WalletProvider with ChangeNotifier {
   final Set<String> _localPendingTxs = {};
   
   // RPC Config
-  String _rpcUrl = 'btcs-vps13.duckdns.org/btcs-rpc';
+  String _rpcUrl = 'https://btcs-vps13.duckdns.org/btcs-rpc';
   String _rpcUser = '';
   String _rpcPassword = '';
 
