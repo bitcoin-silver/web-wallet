@@ -29,7 +29,7 @@ class FooterWidget extends StatelessWidget {
       ),
       child: Center(
         child: Container(
-          constraints: const BoxConstraints(maxWidth: 1600),
+          constraints: const BoxConstraints(maxWidth: 1800),
           child: Column(
             children: [
               LayoutBuilder(

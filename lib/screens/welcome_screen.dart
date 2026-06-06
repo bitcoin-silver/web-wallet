@@ -26,16 +26,16 @@ class WelcomeScreen extends StatelessWidget {
             children: [
               // Main Content
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 100, horizontal: 24),
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 24),
                 child: Center(
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 800),
+                    constraints: const BoxConstraints(maxWidth: 1200),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Hero(
                           tag: 'logo',
-                          child: Image.asset('assets/logo.png', height: 180),
+                          child: Image.asset('assets/logo.png', height: 160),
                         ),
                         const SizedBox(height: 24),
                         const Text(
@@ -56,7 +56,7 @@ class WelcomeScreen extends StatelessWidget {
                             letterSpacing: 2,
                           ),
                         ),
-                        const SizedBox(height: 60),
+                        const SizedBox(height: 20),
                         _buildOptionCard(
                           context,
                           title: 'Seed Phrase Wallet',
