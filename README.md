@@ -53,7 +53,7 @@ A new dashboard to monitor the BTCS network health directly within the wallet:
 
 - **Seed Phrase Wallet**: Modern 12/24 word recovery phrases (Recommended).
 - **Legacy WIF Wallet**: Support for existing raw Private Keys (WIF).
-- **Send/Receive**: Full transaction support with Bech32 (s21...) addresses and QR codes.
+- **Send/Receive**: Full transaction support with Bech32 (bs1...) addresses and QR codes.
 - **Glassmorphism UI**: A sleek, dark-themed interface with neon purple and gold accents.
 
 ## Security Warning
@@ -76,8 +76,6 @@ or
 flutter run -d web-server --web-port 8080
 ```
 
-
-
 ## Building for Deployment
 
 Build the web app:
@@ -87,13 +85,13 @@ flutter build web --release --base-href "/web-wallet/"
 
 ## RPC Configuration
 
-The wallet uses an RPC proxy to communicate with BitcoinSilver nodes. By default the project expects a secure proxy endpoint such as `https://btcs-vps13.duckdns.org/btcs-rpc` (or your own proxy). The proxy must:
+The wallet uses an RPC proxy to communicate with BitcoinSilver nodes. By default the project expects a secure proxy endpoint such as `https://btcs-vps13.duckdns.org/btcs-rpc` (or your own proxy).
+
+The proxy must:
 
 - Serve over HTTPS.
 - Return a single `Access-Control-Allow-Origin` header matching `https://bitcoinsilver.top` (or the origin you host the wallet from).
 - Handle preflight `OPTIONS` requests and forward POST JSON-RPC payloads to an upstream node.
-
-If you run the proxy with nginx, use `proxy_hide_header` to avoid duplicate CORS headers and add a single `Access-Control-Allow-Origin` header as shown in the project docs.
 
 ## License
 
