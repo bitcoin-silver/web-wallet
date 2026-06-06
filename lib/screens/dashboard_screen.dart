@@ -239,9 +239,9 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       padding: const EdgeInsets.all(32),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: wallet.hasPending 
-            ? [Colors.orange.shade800, Colors.orange.shade600] 
-            : [AppTheme.primaryColor, AppTheme.accentColor],
+        colors: wallet.hasPending 
+          ? [Colors.orange.shade800, Colors.orange.shade600] 
+          : [const Color(0xFF1A3A5C), const Color(0xFF0D2137)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),

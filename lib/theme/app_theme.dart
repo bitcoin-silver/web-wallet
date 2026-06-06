@@ -16,7 +16,10 @@ class AppTheme {
         primary: primaryColor,
         secondary: secondaryColor,
         surface: surfaceColor,
+        onPrimary: backgroundColor,   // dark text ON light primary
+        onSecondary: backgroundColor,
         onSurface: Colors.white,
+        onBackground: Colors.white,
       ),
       cardTheme: CardThemeData(
         color: surfaceColor,
@@ -29,7 +32,7 @@ class AppTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: primaryColor,
-          foregroundColor: Colors.white,
+          foregroundColor: backgroundColor, // dark text ON light button
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           elevation: 0,
@@ -38,6 +41,8 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.black.withValues(alpha: 0.2),
+        labelStyle: const TextStyle(color: secondaryColor),
+        hintStyle: TextStyle(color: primaryColor.withValues(alpha: 0.5)),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: primaryColor.withValues(alpha: 0.3)),
