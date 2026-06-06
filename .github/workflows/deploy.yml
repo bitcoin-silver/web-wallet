@@ -13,6 +13,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -29,20 +30,11 @@ jobs:
       - name: Build web
         run: flutter build web --release --base-href "/web-wallet/"
 
-      - name: Verify build output
-        run: |
-          if [ ! -d "./build/web" ]; then
-            echo "ERROR: Build output directory not found!"
-            ls -la ./build/ || echo "build/ directory doesn't exist"
-            exit 1
-          fi
-          echo "Build output exists:"
-          ls -la ./build/web/
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Upload Pages artifact
+        uses: actions/upload-artifact@v4
         with:
-          path: 'build/web'
+          name: github-pages
+          path: build/web
           retention-days: 1
 
   deploy:
@@ -55,6 +47,12 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: github-pages
+          path: .
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v3
