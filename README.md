@@ -70,6 +70,7 @@ A new dashboard to monitor the BTCS network health directly within the wallet:
 Run locally:
 ```bash
 flutter run -d chrome
+flutter run -d web-server --web-port 8080
 ```
 
 ## Building for Deployment
