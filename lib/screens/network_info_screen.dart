@@ -133,6 +133,8 @@ class _NetworkInfoScreenState extends State<NetworkInfoScreen> {
   String _formatHashrate(dynamic hashrate) {
     if (hashrate == null) return 'N/A';
     double rate = (hashrate as num).toDouble();
+    if (rate > 1e18) return '${(rate / 1e18).toStringAsFixed(2)} EH/s';
+    if (rate > 1e15) return '${(rate / 1e15).toStringAsFixed(2)} PH/s';
     if (rate > 1e12) return '${(rate / 1e12).toStringAsFixed(2)} TH/s';
     if (rate > 1e9) return '${(rate / 1e9).toStringAsFixed(2)} GH/s';
     if (rate > 1e6) return '${(rate / 1e6).toStringAsFixed(2)} MH/s';
