@@ -31,7 +31,7 @@ jobs:
         run: flutter build web --release --base-href "/web-wallet/"
 
       - name: Upload Pages artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v2
         with:
           name: github-pages
           path: build/web
