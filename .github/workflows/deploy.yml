@@ -13,7 +13,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -29,6 +28,16 @@ jobs:
 
       - name: Build web
         run: flutter build web --release --base-href "/web-wallet/"
+
+      - name: Verify build output
+        run: |
+          if [ ! -d "./build/web" ]; then
+            echo "ERROR: Build output directory not found!"
+            ls -la ./build/ || echo "build/ directory doesn't exist"
+            exit 1
+          fi
+          echo "Build output exists:"
+          ls -la ./build/web/
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
