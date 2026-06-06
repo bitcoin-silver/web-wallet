@@ -1,4 +1,4 @@
-# BitcoinSilver Web Wallet v2.0
+# BitcoinSilver Web Wallet v2.2
 
 A modern, secure, and modular web wallet for BitcoinSilver (BTCS). This release provides improved architecture, seed phrase support, and safer RPC communication for web deployment.
 
@@ -16,7 +16,7 @@ A modern, secure, and modular web wallet for BitcoinSilver (BTCS). This release 
   <a href="https://explorer.bitcoinsilver.top">Explorer</a>
 </p>
 
-## Major Updates in v2.0
+## Major Updates in v2.2
 
 ### 🏗️ Modular Architecture
 The project has been refactored from a monolithic structure to a scalable, modular architecture using the **Provider** pattern:
