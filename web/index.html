@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <base href="$FLUTTER_BASE_HREF">
   <meta charset="UTF-8">
@@ -14,18 +15,21 @@
   <!-- Basic OG tags (required for Discord/Twitter/Facebook) -->
   <meta property="og:title" content="BitcoinSilver Web Wallet " />
   <meta property="og:description" content="BitcoinSilver Web Wallet - Simple, secure, decentralized" />
-  <meta property="og:image" content="https://raw.githubusercontent.com/bitcoin-silver/web-wallet/main/assets/og_image.png" />
+  <meta property="og:image"
+    content="https://raw.githubusercontent.com/bitcoin-silver/web-wallet/main/assets/og_image.png" />
   <meta property="og:url" content="https://bitcoinsilver.top/" />
   <meta property="og:type" content="website" />
-  
+
   <!-- Twitter/X card (also used by some other platforms) -->
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="BitcoinSilver Web Wallet" />
   <meta name="twitter:description" content="BitcoinSilver Web Wallet - Simple, secure, decentralized" />
-  <meta name="twitter:image" content="https://raw.githubusercontent.com/bitcoin-silver/web-wallet/main/assets/og_image.png" />
+  <meta name="twitter:image"
+    content="https://raw.githubusercontent.com/bitcoin-silver/web-wallet/main/assets/og_image.png" />
 
   <!-- Security Headers -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://bitcoinsilver.top https://explorer.bitcoinsilver.top https://btcs-vps13.duckdns.org https://www.gstatic.com https://fonts.gstatic.com https://fonts.googleapis.com; base-uri 'self'; form-action 'self';">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://bitcoinsilver.top https://explorer.bitcoinsilver.top https://btcs-vps13.duckdns.org https://www.gstatic.com https://fonts.gstatic.com https://fonts.googleapis.com; base-uri 'self'; form-action 'self';">
   <meta http-equiv="X-Content-Type-Options" content="nosniff">
   <meta name="referrer" content="strict-origin-when-cross-origin">
 
@@ -41,6 +45,7 @@
       color: white;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     }
+
     .loading {
       display: flex;
       justify-content: center;
@@ -48,6 +53,7 @@
       height: 100vh;
       flex-direction: column;
     }
+
     .spinner {
       border: 4px solid #1A1A1A;
       border-top: 4px solid #C0C0C0;
@@ -56,12 +62,19 @@
       height: 40px;
       animation: spin 1s linear infinite;
     }
+
     @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
     }
   </style>
 </head>
+
 <body>
   <div class="loading">
     <div class="spinner"></div>
@@ -70,4 +83,5 @@
 
   <script src="flutter_bootstrap.js" async></script>
 </body>
+
 </html>
