@@ -153,7 +153,7 @@ class WalletService {
     return true;
   }
 
-  // RPC calls
+// RPC calls
   Future<Map<String, dynamic>?> rpcRequest(
     String rpcUrl,
     String rpcUser,
@@ -184,9 +184,23 @@ class WalletService {
         body: body,
       );
 
-      return jsonDecode(response.body);
+      // 🛑 CRITICAL GATE: If it's a 404, 500, or HTML error page, do not parse it.
+      if (response.statusCode != 200) {
+        throw Exception('Server returned HTTP status code: ${response.statusCode}');
+      }
+
+      final dynamic decoded = jsonDecode(response.body);
+      
+      // Safety check to ensure the decoded object is a proper JSON-RPC response map
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      
+      throw Exception('Invalid RPC response format received');
     } catch (e) {
-      return null;
+      // 🚨 CRITICAL: Do NOT return null. Rethrow the error so that upper layers
+      // (like _isRpcAvailable or your try-catch blocks) know the connection is dead!
+      rethrow;
     }
   }
 

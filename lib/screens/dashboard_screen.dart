@@ -62,11 +62,37 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                   child: Column(
                     children: [
                       _buildTopBar(wallet, provider),
-                      // Global Message Area
+                      // 🌐 Dynamic Global Message / Connection Banner Area
                       if (provider.message.isNotEmpty)
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                          child: _buildMessage(provider.message),
+                          padding: provider.message.contains('⚠️')
+                              ? EdgeInsets.zero // Span full width across the content panel for connection drops
+                              : const EdgeInsets.symmetric(horizontal: 24, vertical: 8), // Standard padding for actions
+                          child: provider.message.contains('⚠️')
+                              ? Container(
+                                  width: double.infinity,
+                                  color: Colors.amber.shade900,
+                                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(Icons.cloud_off_rounded, color: Colors.white, size: 20),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          provider.message,
+                                          style: const TextStyle(
+                                            color: Colors.white, 
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : _buildMessage(provider.message), // Fallback to your custom message styling for normal info
                         ),
                       Expanded(
                         child: TabBarView(
@@ -644,7 +670,7 @@ void _showMigrationDialog(BuildContext context, WalletProvider provider) {
         const SizedBox(height: 10),
         const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Text('BTCS Web-Wallet version 2.2', 
+              child: Text('BTCS Web-Wallet version 2.3', 
               style: TextStyle(color: Colors.white54, fontSize: 12),
               textAlign: TextAlign.center
         ),      

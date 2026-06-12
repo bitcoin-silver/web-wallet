@@ -20,23 +20,45 @@ class _SetupScreenState extends State<SetupScreen> {
   String? _generatedWif;
   bool _hasConfirmedBackup = false;
   int _seedWordCount = 12;
+  bool _isProcessing = false;
 
   Future<void> _handleGenerate() async {
+    setState(() {
+      _isProcessing = true;
+    });
+
+    await Future.delayed(const Duration(milliseconds: 300));
     final provider = context.read<WalletProvider>();
-    if (widget.useSeed) {
-      await provider.generateNewSeedWallet(words: _seedWordCount);
-      if (mounted && provider.wallet != null) {
-        setState(() {
-          _isGenerating = true;
-          _generatedMnemonic = provider.wallet?.mnemonic;
-        });
+    
+    try {
+      if (widget.useSeed) {
+        final walletData = await provider.walletService.generateNewSeedWallet(words: _seedWordCount);
+        if (mounted) {
+          setState(() {
+            _generatedMnemonic = walletData['mnemonic'];
+            _generatedWif = walletData['privateKey'];
+            _isGenerating = true; // Only switch view when calculations are complete
+          });
+        }
+      } else {
+        final walletData = provider.walletService.generateNewWallet();
+        if (mounted) {
+          setState(() {
+            _generatedWif = walletData['privateKey'];
+            _isGenerating = true;
+          });
+        }
       }
-    } else {
-      await provider.generateNewWifWallet();
-      if (mounted && provider.wallet != null) {
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Generation failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
         setState(() {
-          _isGenerating = true;
-          _generatedWif = provider.wallet?.privateKey;
+          _isProcessing = false;
         });
       }
     }
@@ -48,19 +70,33 @@ class _SetupScreenState extends State<SetupScreen> {
 
     final provider = context.read<WalletProvider>();
     if (widget.useSeed) {
-      provider.loadSeedWallet(input).then((_) {
-        if (provider.isLoaded && mounted) Navigator.pop(context);
+      provider.loadSeedWallet(input).then((success) {
+        if (success && provider.isLoaded && mounted) Navigator.pop(context);
       });
     } else {
-      provider.loadWifWallet(input).then((_) {
-        if (provider.isLoaded && mounted) Navigator.pop(context);
+      provider.loadWifWallet(input).then((success) {
+        if (success && provider.isLoaded && mounted) Navigator.pop(context);
       });
     }
   }
 
-  void _handleFinalize() {
+  Future<void> _handleFinalize() async {
     if (widget.useSeed && !_hasConfirmedBackup) return;
-    Navigator.pop(context);
+
+    final provider = context.read<WalletProvider>();
+    bool success = false;
+    
+    if (widget.useSeed) {
+      if (_generatedMnemonic == null) return;
+      success = await provider.loadSeedWallet(_generatedMnemonic!);
+    } else {
+      if (_generatedWif == null) return;
+      success = await provider.loadWifWallet(_generatedWif!);
+    }
+
+    if (success && provider.isLoaded && mounted) {
+      Navigator.pop(context);
+    }
   }
 
   @override
@@ -123,7 +159,7 @@ class _SetupScreenState extends State<SetupScreen> {
                 ],
                 const SizedBox(height: 40),
                 const Text(
-                  'BTCS Web-Wallet version 2.2',
+                  'BTCS Web-Wallet version 2.3',
                   style: TextStyle(color: Colors.white54, fontSize: 14),
                   textAlign: TextAlign.center,
                 ),
@@ -200,8 +236,8 @@ class _SetupScreenState extends State<SetupScreen> {
           ),
           const SizedBox(height: 20),
           OutlinedButton.icon(
-            onPressed: provider.isLoading ? null : _handleGenerate,
-            icon: provider.isLoading 
+            onPressed: _isProcessing ? null : _handleGenerate,
+            icon: _isProcessing
               ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
               : const Icon(Icons.add_circle_outline_rounded),
             label: const Text('Generate New Seed Phrase'),
@@ -217,21 +253,23 @@ class _SetupScreenState extends State<SetupScreen> {
     }
 
     return OutlinedButton.icon(
-      onPressed: provider.isLoading ? null : _handleGenerate,
-      icon: provider.isLoading 
+      onPressed: _isProcessing ? null : _handleGenerate,
+      icon: _isProcessing
         ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
         : const Icon(Icons.add_circle_outline_rounded),
-      label: Text(widget.useSeed ? 'Generate New Seed Phrase' : 'Generate New Private Key'),
+      label: const Text('Generate New Private Key'),
       style: OutlinedButton.styleFrom(
         padding: const EdgeInsets.all(20),
         side: const BorderSide(color: AppTheme.primaryColor),
         foregroundColor: AppTheme.primaryColor,
+        minimumSize: const Size(double.infinity, 60),
       ),
     );
   }
 
   Widget _buildBackupSection() {
     final data = widget.useSeed ? _generatedMnemonic : _generatedWif;
+    final provider = context.watch<WalletProvider>();
     
     return Column(
       children: [
@@ -307,12 +345,16 @@ class _SetupScreenState extends State<SetupScreen> {
           ),
         const SizedBox(height: 24),
         ElevatedButton(
-          onPressed: (widget.useSeed && !_hasConfirmedBackup) ? null : _handleFinalize,
+          onPressed: provider.isLoading 
+              ? null 
+              : ((widget.useSeed && !_hasConfirmedBackup) ? null : _handleFinalize),
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.green,
             minimumSize: const Size(double.infinity, 60),
           ),
-          child: const Text('I\'M READY, LET\'S GO'),
+          child: provider.isLoading
+              ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+              : const Text('I\'M READY, LET\'S GO'),
         ),
       ],
     );

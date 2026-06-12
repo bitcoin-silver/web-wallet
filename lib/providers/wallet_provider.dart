@@ -21,6 +21,9 @@ class WalletProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   String get message => _message;
   bool get isLoaded => _wallet != null;
+  
+  // Expose walletService to let the setup UI generate local keys safely
+  WalletService get walletService => _walletService;
 
   WalletProvider() {
     _loadRpcConfig();
@@ -40,77 +43,68 @@ class WalletProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> loadWifWallet(String wif) async {
-    _isLoading = true;
-    _message = '⏳ Loading wallet...';
-    notifyListeners();
+  /// Private helper to verify RPC availability before making blocking network calls
+  Future<bool> _isRpcAvailable() async {
+    try {
+      final info = await getNetworkInfo();
+      
+      // Ensure we got a valid map response, and verify a key that ONLY exists on successful nodes
+      // Example: 'version', 'blocks', or 'protocolversion'
+      if (info != null && (info.containsKey('version') || info.containsKey('blocks'))) {
+        return true;
+      }
+      
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
 
-    await Future.delayed(const Duration(milliseconds: 500));
+  /// Private helper to fetch UTXOs and calculate balances, reducing code duplication
+  Future<Map<String, dynamic>> _fetchAndPopulateWalletBalances(String address) async {
+    final utxos = await _walletService.getUtxos(_rpcUrl, _rpcUser, _rpcPassword, address);
+    final balance = _walletService.calculateBalance(utxos);
+    final unconfirmed = _walletService.calculateUnconfirmedBalance(utxos);
+    final hasMempoolActivity = utxos.any((u) => u['confirmations'] == 0);
+
+    return {
+      'balance': balance,
+      'unconfirmedBalance': unconfirmed,
+      'isPending': hasMempoolActivity,
+    };
+  }
+
+Future<void> refreshBalance() async {
+    if (_wallet == null) return;
 
     try {
-      final address = _walletService.getAddressFromWif(wif);
-      if (address == null) {
-        _message = '❌ Invalid WIF Private Key';
-        _isLoading = false;
-        notifyListeners();
-        return;
-      }
-
-      final utxos = await _walletService.getUtxos(_rpcUrl, _rpcUser, _rpcPassword, address);
+      // If rpcRequest throws an exception due to a 404/disconnect, it jumps straight to catch
+      final utxos = await _walletService.getUtxos(
+          _rpcUrl, _rpcUser, _rpcPassword, _wallet!.address);
+          
       final balance = _walletService.calculateBalance(utxos);
       final unconfirmed = _walletService.calculateUnconfirmedBalance(utxos);
       final hasMempoolActivity = utxos.any((u) => u['confirmations'] == 0);
 
-      _wallet = WalletModel(
-        address: address,
-        privateKey: wif,
-        type: WalletType.wif,
+      if (!hasMempoolActivity) {
+        _localPendingTxs.clear();
+      }
+
+      _wallet = _wallet!.copyWith(
         balance: balance,
         unconfirmedBalance: unconfirmed,
-        isPending: hasMempoolActivity,
+        isPending: hasMempoolActivity || _localPendingTxs.isNotEmpty,
       );
-
-      _isLoading = false;
-      _message = '✅ Wallet loaded successfully!';
+      
+      // Clear any previous connection errors if it successfully fetches
+      if (_message.contains('Connection lost')) _message = '';
       notifyListeners();
-    } catch (e) {
-      _message = '❌ ${e.toString().replaceAll('Exception: ', '')}';
-      _isLoading = false;
+    } catch (_) {
+      // 💡 Update message state so the dashboard can show a 'Connection Lost / Working Offline' banner
+      _message = '⚠️ Connection lost. Displaying cached balances.';
       notifyListeners();
-      return;
     }
-    
-    // Auto-clear success message
-    Future.delayed(const Duration(seconds: 5), () {
-      if (_message.contains('✅')) _message = '';
-      notifyListeners();
-    });
   }
-
-    Future<void> refreshBalance() async {
-      if (_wallet == null) return;
-
-      try {
-        final utxos = await _walletService.getUtxos(
-            _rpcUrl, _rpcUser, _rpcPassword, _wallet!.address);
-        final balance = _walletService.calculateBalance(utxos);
-        final unconfirmed = _walletService.calculateUnconfirmedBalance(utxos);
-        final hasMempoolActivity = utxos.any((u) => u['confirmations'] == 0);
-
-        if (!hasMempoolActivity) {
-          _localPendingTxs.clear();
-        }
-
-        _wallet = _wallet!.copyWith(
-          balance: balance,
-          unconfirmedBalance: unconfirmed,
-          isPending: hasMempoolActivity || _localPendingTxs.isNotEmpty,
-        );
-        notifyListeners();
-      } catch (_) {
-        // Silent fail — UI keeps last known state, no crash
-      }
-    }
 
   Future<bool> sendTransaction(String toAddress, double amount) async {
     if (_wallet == null) return false;
@@ -159,12 +153,13 @@ class WalletProvider with ChangeNotifier {
     _wallet = null;
     _isLoading = false;
     _message = '';
-    _localPendingTxs.clear(); // ← missing
+    _localPendingTxs.clear();
     _storage.clearSession();
     notifyListeners();
   }
 
-  Future<void> loadSeedWallet(String mnemonic) async {
+  // Changed from Future<void> to Future<bool>
+  Future<bool> loadSeedWallet(String mnemonic) async {
     _isLoading = true;
     _message = '⏳ Loading wallet...';
     notifyListeners();
@@ -172,100 +167,112 @@ class WalletProvider with ChangeNotifier {
     // Give the UI a moment to render the spinner
     await Future.delayed(const Duration(milliseconds: 500));
 
+    // 1. Validate the RPC Connection first
+    if (!await _isRpcAvailable()) {
+      _message = '❌ RPC Connection unavailable. Check your network.';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+
     final walletData = await _walletService.getWalletFromMnemonic(mnemonic);
     if (walletData == null) {
       _message = '❌ Invalid Seed Phrase';
       _isLoading = false;
       notifyListeners();
-      return;
+      return false;
     }
 
     final address = walletData['address']!;
     final wif = walletData['privateKey']!;
 
-    final utxos = await _walletService.getUtxos(_rpcUrl, _rpcUser, _rpcPassword, address);
-    final balance = _walletService.calculateBalance(utxos);
-    final unconfirmed = _walletService.calculateUnconfirmedBalance(utxos);
-    final hasMempoolActivity = utxos.any((u) => u['confirmations'] == 0);
+    try {
+      // 2. Fetch network balances using the shared helper
+      final walletBalances = await _fetchAndPopulateWalletBalances(address);
 
-    _wallet = WalletModel(
-      address: address,
-      privateKey: wif,
-      mnemonic: mnemonic,
-      type: WalletType.seed,
-      balance: balance,
-      unconfirmedBalance: unconfirmed,
-      isPending: hasMempoolActivity,
-    );
+      _wallet = WalletModel(
+        address: address,
+        privateKey: wif,
+        mnemonic: mnemonic,
+        type: WalletType.seed,
+        balance: walletBalances['balance'],
+        unconfirmedBalance: walletBalances['unconfirmedBalance'],
+        isPending: walletBalances['isPending'],
+      );
 
-    _isLoading = false;
-    _message = '✅ Wallet loaded successfully!';
-    notifyListeners();
-    
-    // Auto-clear success message
-    Future.delayed(const Duration(seconds: 5), () {
-      if (_message.contains('✅')) _message = '';
+      _isLoading = false;
+      _message = '✅ Wallet loaded successfully!';
       notifyListeners();
-    });
+      
+      // Auto-clear success message
+      Future.delayed(const Duration(seconds: 5), () {
+        if (_message.contains('✅')) _message = '';
+        notifyListeners();
+      });
+
+      return true;
+    } catch (e) {
+      _message = '❌ Failed to fetch wallet data: ${e.toString().replaceAll('Exception: ', '')}';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
   }
-  Future<void> generateNewWifWallet() async {
+
+  // Changed from Future<void> to Future<bool>
+  Future<bool> loadWifWallet(String wif) async {
     _isLoading = true;
-    _message = '⏳ Generating wallet...';
+    _message = '⏳ Loading wallet...';
     notifyListeners();
 
     await Future.delayed(const Duration(milliseconds: 500));
 
-    final walletData = _walletService.generateNewWallet();
-    final address = walletData['address']!;
-    final wif = walletData['privateKey']!;
-
-    _wallet = WalletModel(
-      address: address,
-      privateKey: wif,
-      type: WalletType.wif,
-      balance: 0.0,
-    );
-
-    _isLoading = false;
-    _message = '✅ Wallet generated successfully!';
-    notifyListeners();
-
-    // Auto-clear success message
-    Future.delayed(const Duration(seconds: 5), () {
-      if (_message.contains('✅')) _message = '';
+    // 1. Validate the RPC Connection first
+    if (!await _isRpcAvailable()) {
+      _message = '❌ RPC Connection unavailable. Check your network.';
+      _isLoading = false;
       notifyListeners();
-    });
-  }
+      return false;
+    }
 
-  Future<void> generateNewSeedWallet({int words = 12}) async {
-    _isLoading = true;
-    _message = '⏳ Generating $words-word seed phrase...';
-    notifyListeners();
+    try {
+      final address = _walletService.getAddressFromWif(wif);
+      if (address == null) {
+        _message = '❌ Invalid WIF Private Key';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
 
-    await Future.delayed(const Duration(milliseconds: 500));
+      // 2. Fetch network balances using the shared helper
+      final walletBalances = await _fetchAndPopulateWalletBalances(address);
 
-    final walletData = await _walletService.generateNewSeedWallet(words: words);
-    final mnemonic = walletData['mnemonic']!;
-    final address = walletData['address']!;
-    final wif = walletData['privateKey']!;
+      _wallet = WalletModel(
+        address: address,
+        privateKey: wif,
+        type: WalletType.wif,
+        balance: walletBalances['balance'],
+        unconfirmedBalance: walletBalances['unconfirmedBalance'],
+        isPending: walletBalances['isPending'],
+      );
 
-    _wallet = WalletModel(
-      address: address,
-      privateKey: wif,
-      mnemonic: mnemonic,
-      type: WalletType.seed,
-      balance: 0.0,
-    );
-
-    _isLoading = false;
-    _message = '✅ Seed phrase generated!';
-    notifyListeners();
-
-    // Auto-clear success message
-    Future.delayed(const Duration(seconds: 5), () {
-      if (_message.contains('✅')) _message = '';
+      _isLoading = false;
+      _message = '✅ Wallet loaded successfully!';
       notifyListeners();
-    });
+      
+      // Auto-clear success message
+      Future.delayed(const Duration(seconds: 5), () {
+        if (_message.contains('✅')) _message = '';
+        notifyListeners();
+      });
+
+      return true;
+    } catch (e) {
+      _message = '❌ ${e.toString().replaceAll('Exception: ', '')}';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
   }
 
   Future<bool> migrateToSeed({int words = 12, bool skipSweep = false}) async {
@@ -277,11 +284,9 @@ class WalletProvider with ChangeNotifier {
 
     await Future.delayed(const Duration(milliseconds: 500));
 
-    // 1. Generate new seed wallet
     final oldWif = _wallet!.privateKey;
     final oldAddress = _wallet!.address;
 
-    // Before reading balance, refresh first
     await refreshBalance();
     final currentBalance = _wallet!.balance;
     
@@ -294,7 +299,6 @@ class WalletProvider with ChangeNotifier {
       _message = '⏳ Sweeping funds to new address...';
       notifyListeners();
 
-      // 2. Sweep funds (Send max)
       final result = await _walletService.sendTransaction(
         _rpcUrl,
         _rpcUser,
@@ -309,9 +313,9 @@ class WalletProvider with ChangeNotifier {
         _isLoading = false;
         _message = '❌ Migration failed: ${result['message']}';
         notifyListeners();
-        return false;
+        return false; // Exits safely without losing access to the old WIF wallet!
       }
-     _localPendingTxs.add(result['txid'] as String);
+      _localPendingTxs.add(result['txid'] as String);
     }
 
     _wallet = WalletModel(
@@ -328,15 +332,12 @@ class WalletProvider with ChangeNotifier {
       : '✅ Migration successful! (Empty wallet)';
     notifyListeners();
 
-    // Auto-clear success message
     Future.delayed(const Duration(seconds: 5), () {
       if (_message.contains('✅')) _message = '';
       notifyListeners();
     });
     
-    // Refresh balance in background so modal can show immediately
     refreshBalance();
-    
     return true;
   }
 }

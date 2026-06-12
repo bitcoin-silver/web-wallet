@@ -19,7 +19,7 @@ class AppTheme {
         onPrimary: backgroundColor,   // dark text ON light primary
         onSecondary: backgroundColor,
         onSurface: Colors.white,
-        onBackground: Colors.white,
+        //onBackground: Colors.white, // default is white, so we can omit it, deprecated in favor of scaffoldBackgroundColor
       ),
       cardTheme: CardThemeData(
         color: surfaceColor,
