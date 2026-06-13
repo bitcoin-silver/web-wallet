@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/wallet_model.dart';
 import '../services/wallet_service.dart';
+import '../models/transaction_model.dart';
 import '../services/storage_service.dart';
 
 class WalletProvider with ChangeNotifier {
@@ -11,7 +12,10 @@ class WalletProvider with ChangeNotifier {
   bool _isLoading = false;
   String _message = '';
   final Set<String> _localPendingTxs = {};
-  
+  List<TransactionModel> _transactions = [];
+  bool _isLoadingTxs = false;
+  int _txCount = 0;
+
   // RPC Config
   String _rpcUrl = 'https://btcs-vps13.duckdns.org/btcs-rpc';
   String _rpcUser = '';
@@ -21,7 +25,54 @@ class WalletProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   String get message => _message;
   bool get isLoaded => _wallet != null;
-  
+
+  List<TransactionModel> get transactions => _transactions;
+  List<TransactionModel> get visibleTransactions => _transactions;
+  bool get hasMoreTransactions => _transactions.length < _txCount;
+  bool get isLoadingTxs => _isLoadingTxs;
+
+  Future<void> loadMoreTransactions() async {
+    if (_wallet == null || _isLoadingTxs || !hasMoreTransactions) return;
+
+    _isLoadingTxs = true;
+    notifyListeners();
+
+    try {
+      final data = await _walletService.getTransactions(
+        _wallet!.address,
+        offset: _transactions.length,
+        limit: 10,
+      );
+
+      final rawList = data['transactions'] as List<Map<String, dynamic>>? ?? [];
+
+      final newTxs = rawList.map((m) {
+        final dir = m['direction'] as String;
+        return TransactionModel(
+          txid: m['txid'] as String,
+          amount: (m['amount'] as num).toDouble(),
+          direction: dir == 'sent'
+              ? TxDirection.sent
+              : dir == 'self'
+                  ? TxDirection.selfTransfer
+                  : TxDirection.received,
+          confirmations: m['confirmations'] as int,
+          timestamp: m['timestamp'] != null
+              ? DateTime.fromMillisecondsSinceEpoch(
+                  (m['timestamp'] as int) * 1000)
+              : null,
+          counterpartyAddress: m['counterparty'] as String?,
+        );
+      }).toList();
+
+      _transactions.addAll(newTxs);
+    } catch (_) {
+    } finally {
+      _isLoadingTxs = false;
+      notifyListeners();
+    }
+  }
+ 
   // Expose walletService to let the setup UI generate local keys safely
   WalletService get walletService => _walletService;
 
@@ -99,9 +150,48 @@ Future<void> refreshBalance() async {
       // Clear any previous connection errors if it successfully fetches
       if (_message.contains('Connection lost')) _message = '';
       notifyListeners();
+      // Refresh transaction history in background
+      fetchTransactions();
     } catch (_) {
       // 💡 Update message state so the dashboard can show a 'Connection Lost / Working Offline' banner
       _message = '⚠️ Connection lost. Displaying cached balances.';
+      notifyListeners();
+    }
+  }
+
+  /// Fetch first page of transactions for the current wallet address.
+  Future<void> fetchTransactions() async {
+    if (_wallet == null) return;
+    _isLoadingTxs = true;
+    notifyListeners();
+
+    try {
+      final data = await _walletService.getTransactions(_wallet!.address, offset: 0, limit: 10);
+      final rawList = data['transactions'] as List<Map<String, dynamic>>? ?? [];
+      _txCount = data['txCount'] as int? ?? 0;
+
+      _transactions = rawList.map((m) {
+        final dir = m['direction'] as String;
+        return TransactionModel(
+          txid: m['txid'] as String,
+          amount: (m['amount'] as num).toDouble(),
+          direction: dir == 'sent'
+              ? TxDirection.sent
+              : dir == 'self'
+                  ? TxDirection.selfTransfer
+                  : TxDirection.received,
+          confirmations: m['confirmations'] as int,
+          timestamp: m['timestamp'] != null
+              ? DateTime.fromMillisecondsSinceEpoch(
+                  (m['timestamp'] as int) * 1000)
+              : null,
+          counterpartyAddress: m['counterparty'] as String?,
+        );
+      }).toList();
+    } catch (_) {
+      // silently ignore — history is non-critical
+    } finally {
+      _isLoadingTxs = false;
       notifyListeners();
     }
   }
@@ -153,6 +243,8 @@ Future<void> refreshBalance() async {
     _wallet = null;
     _isLoading = false;
     _message = '';
+    _transactions = [];
+    _isLoadingTxs = false;
     _localPendingTxs.clear();
     _storage.clearSession();
     notifyListeners();
@@ -209,6 +301,8 @@ Future<void> refreshBalance() async {
         if (_message.contains('✅')) _message = '';
         notifyListeners();
       });
+      // Load transaction history in background
+      fetchTransactions();
 
       return true;
     } catch (e) {
@@ -265,6 +359,9 @@ Future<void> refreshBalance() async {
         if (_message.contains('✅')) _message = '';
         notifyListeners();
       });
+      
+      // Load transaction history in background
+      fetchTransactions();
 
       return true;
     } catch (e) {

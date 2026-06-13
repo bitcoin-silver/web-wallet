@@ -457,6 +457,53 @@ class WalletService {
     };
   }
 
+  // ---------------------------------------------------------------------------
+  // Get transaction history for an address via the Explorer API.
+  // Uses server-side pagination with offset and limit.
+  // ---------------------------------------------------------------------------
+  Future<Map<String, dynamic>> getTransactions(String address, {int offset = 0, int limit = 10}) async {
+    const String explorerBase = 'https://explorer.bitcoinsilver.top/api/getaddress';
+    final url = '$explorerBase/$address/txs?offset=$offset&limit=$limit';
+
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode != 200) return {'transactions': [], 'txCount': 0};
+
+      final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+      final txList = decoded['transactions'] as List<dynamic>? ?? [];
+      final txCount = decoded['txCount'] as int? ?? decoded['total'] as int? ?? 0;
+      final returnedOffset = decoded['offset'] as int? ?? offset;
+      final returnedLimit = decoded['limit'] as int? ?? limit;
+      final pageCount = decoded['pageCount'] as int?;
+
+      final parsedTransactions = txList.map((t) {
+        final tx = t as Map<String, dynamic>;
+        final txType = (tx['type'] as String?) ?? 'received';
+        final amount = (tx['amount'] as num?)?.toDouble() ?? 0.0;
+        final timestamp = tx['timestamp'] as int?;
+
+        return {
+          'txid': tx['txid'] as String,
+          'amount': amount.abs(),
+          'direction': txType == 'sent' ? 'sent' : txType == 'received' ? 'received' : 'received',
+          'confirmations': 0,
+          'timestamp': timestamp,
+          'counterparty': null,
+        };
+      }).toList();
+
+      return {
+        'transactions': parsedTransactions,
+        'txCount': txCount,
+        'offset': returnedOffset,
+        'limit': returnedLimit,
+        'pageCount': pageCount,
+      };
+    } catch (_) {
+      return {'transactions': [], 'txCount': 0};
+    }
+  }
+
   // Get network info
   Future<Map<String, dynamic>?> getNetworkInfo(
     String rpcUrl,

@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../providers/wallet_provider.dart';
 import '../theme/app_theme.dart';
 import '../models/wallet_model.dart';
+import '../models/transaction_model.dart';
 import 'network_info_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -249,6 +250,9 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           const Text('Your Assets', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 20),
           _buildAssetItem('BTCS', 'Bitcoin Silver', wallet.balance, 'assets/logo_btcs.png'),
+          // ── Transaction History ──────────────────────────────────────────
+          const SizedBox(height: 40),
+          _buildTransactionHistory(provider),
           
           if (wallet.type == WalletType.wif) ...[
             const SizedBox(height: 40),
@@ -404,6 +408,278 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             child: const Text('Start Migration (Sweep)'),
           ),
         ],
+      ),
+    );
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Transaction History
+  // ──────────────────────────────────────────────────────────────────────────
+
+  Widget _buildTransactionHistory(WalletProvider provider) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Transaction History',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            if (provider.isLoadingTxs)
+              const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            else
+              IconButton(
+                icon: const Icon(Icons.refresh_rounded, size: 20),
+                tooltip: 'Refresh history',
+                onPressed: provider.fetchTransactions,
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (provider.isLoadingTxs && provider.transactions.isEmpty)
+          ..._buildTxShimmer()
+        else if (provider.transactions.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 40),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: Column(
+              children: [
+                Icon(Icons.receipt_long_rounded,
+                    size: 48, color: Colors.white24),
+                const SizedBox(height: 12),
+                const Text(
+                  'No transactions yet',
+                  style: TextStyle(color: Colors.white38, fontSize: 15),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Your transaction history will appear here.',
+                  style: TextStyle(color: Colors.white24, fontSize: 13),
+                ),
+              ],
+            ),
+          )
+        else ...[
+          ...provider.visibleTransactions
+              .map((tx) => _buildTransactionCard(tx)),
+          if (provider.hasMoreTransactions)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: provider.loadMoreTransactions,
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    backgroundColor: Colors.white.withValues(alpha: 0.05),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Load More Transactions'),
+                ),
+              ),
+            ),
+        ]
+      ],
+    );
+  }
+
+  List<Widget> _buildTxShimmer() {
+    return List.generate(
+      4,
+      (i) => Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        height: 72,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(14),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTransactionCard(TransactionModel tx) {
+    final isSent = tx.direction == TxDirection.sent;
+    final isSelf = tx.direction == TxDirection.selfTransfer;
+    final Color dirColor = isSelf
+        ? Colors.blueAccent
+        : isSent
+            ? Colors.redAccent
+            : Colors.greenAccent;
+    final IconData dirIcon = isSelf
+        ? Icons.swap_horiz_rounded
+        : isSent
+            ? Icons.arrow_upward_rounded
+            : Icons.arrow_downward_rounded;
+    final String dirLabel = isSelf ? 'Self' : isSent ? 'Sent' : 'Received';
+    final String amountStr =
+        '${isSent ? '-' : '+'}${tx.amount.toStringAsFixed(8)} S256';
+
+    // Relative timestamp
+    String timeLabel = 'Pending';
+    if (tx.timestamp != null) {
+      final now = DateTime.now();
+      final diff = now.difference(tx.timestamp!);
+      if (diff.inMinutes < 60) {
+        timeLabel = '${diff.inMinutes}m ago';
+      } else if (diff.inHours < 24) {
+        timeLabel = '${diff.inHours}h ago';
+      } else {
+        timeLabel = '${diff.inDays}d ago';
+      }
+    }
+
+    final explorerUrl =
+        'https://explorer.bitcoinsilver.top/tx/${tx.txid}';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => launchUrl(Uri.parse(explorerUrl),
+            mode: LaunchMode.externalApplication),
+        child: Padding(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              // Direction icon circle
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: dirColor.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(dirIcon, color: dirColor, size: 20),
+              ),
+              const SizedBox(width: 14),
+
+              // TXID + timestamp
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          dirLabel,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: dirColor,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _buildTxBadge(tx),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Text(
+                          tx.shortTxid,
+                          style: const TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 11,
+                            color: Colors.white38,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        GestureDetector(
+                          onTap: () {
+                            Clipboard.setData(
+                                ClipboardData(text: tx.txid));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content: Text('TXID copied'),
+                                  duration: Duration(seconds: 2)),
+                            );
+                          },
+                          child: const Icon(Icons.copy_rounded,
+                              size: 12, color: Colors.white24),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              // Amount + time
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    amountStr,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: isSelf ? Colors.white70 : dirColor,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    timeLabel,
+                    style: const TextStyle(
+                        fontSize: 11, color: Colors.white38),
+                  ),
+                ],
+              ),
+
+              const SizedBox(width: 8),
+              const Icon(Icons.open_in_new_rounded,
+                  size: 14, color: Colors.white24),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTxBadge(TransactionModel tx) {
+    if (tx.isPending) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        decoration: BoxDecoration(
+          color: Colors.orange.withValues(alpha: 0.2),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
+        ),
+        child: const Text(
+          'PENDING',
+          style: TextStyle(
+              fontSize: 9,
+              color: Colors.orange,
+              fontWeight: FontWeight.bold),
+        ),
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.green.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+      ),
+      child: Text(
+        '${tx.confirmations} conf',
+        style: const TextStyle(
+            fontSize: 9, color: Colors.greenAccent, fontWeight: FontWeight.bold),
       ),
     );
   }
