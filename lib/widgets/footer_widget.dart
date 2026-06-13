@@ -160,7 +160,7 @@ class FooterWidget extends StatelessWidget {
       links: [
         _FooterLink('Whitepaper', 'https://bitcoinsilver.top/whitepaper.pdf', icon: FontAwesomeIcons.fileLines),
         _FooterLink('BlockChain Explorer', 'https://explorer.bitcoinsilver.top/', icon: FontAwesomeIcons.magnifyingGlass),
-        _FooterLink('GitHub', 'https://github.com/bitcoin-silver', icon: FontAwesomeIcons.github),
+        _FooterLink('GitHub', 'https://github.com/bitcoin-silver/web-wallet', icon: FontAwesomeIcons.github),
       ],
     );
   }
