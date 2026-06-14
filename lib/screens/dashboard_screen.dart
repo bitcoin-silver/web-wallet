@@ -523,7 +523,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             : Icons.arrow_downward_rounded;
     final String dirLabel = isSelf ? 'Self' : isSent ? 'Sent' : 'Received';
     final String amountStr =
-        '${isSent ? '-' : '+'}${tx.amount.toStringAsFixed(8)} S256';
+        '${isSent ? '-' : '+'}${tx.amount.toStringAsFixed(8)} BTCS';
 
     // Relative timestamp
     String timeLabel = 'Pending';
