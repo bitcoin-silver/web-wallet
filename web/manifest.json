@@ -1,7 +1,7 @@
 {
-    "name": "S256 Coin Web Wallet",
-    "short_name": "S256 Wallet",
-    "description": "Simple, secure, decentralized S256 coin web wallet",
+    "name": "Bitcoin Silver Web Wallet",
+    "short_name": "BTCS Web-Wallet",
+    "description": "Simple, secure, decentralized Bitcoin Silver web-wallet",
     "start_url": "./",
     "display": "standalone",
     "background_color": "#0A0A0A",
