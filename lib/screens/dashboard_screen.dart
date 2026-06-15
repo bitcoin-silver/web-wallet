@@ -219,7 +219,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                wallet.type == WalletType.seed ? 'Modern Wallet' : 'Legacy Wallet',
+                wallet.type == WalletType.seed ? 'Modern Web-Wallet' : 'Legacy Web-Wallet',
                 style: const TextStyle(color: Colors.white54, fontSize: 14),
               ),
               const SizedBox(height: 4),
@@ -361,7 +361,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                         style: const TextStyle(color: Colors.white70, fontSize: 14),
                       ),
                       const Text(
-                        'Note: You have unconfirmed transactions. Please wait ~10 min for a block.',
+                        'Note: You have unconfirmed transactions.\nPlease wait ~10 min for a block confirmation.',
                         style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
                       ),
                     ],
