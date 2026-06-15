@@ -282,7 +282,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           // ── Transaction History ──────────────────────────────────────────
           const SizedBox(height: 40),
           _buildTransactionHistory(provider),
-          
+          // ── Migration Card ──────────────────────────────────────────
           if (wallet.type == WalletType.wif) ...[
             const SizedBox(height: 40),
             _buildMigrationCard(provider),
@@ -351,13 +351,13 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '${wallet.totalBalance.toStringAsFixed(8)} BTCS',
+                      '${wallet.totalBalance.toStringAsFixed(2)} BTCS',
                       style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.white),
                     ),
                     if (wallet.hasPending) ...[
                       const SizedBox(height: 8),
                       Text(
-                        'Confirmed: ${wallet.balance.toStringAsFixed(8)} BTCS',
+                        'Confirmed: ${wallet.balance.toStringAsFixed(2)} BTCS',
                         style: const TextStyle(color: Colors.white70, fontSize: 14),
                       ),
                       const Text(
