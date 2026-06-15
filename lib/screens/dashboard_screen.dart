@@ -293,92 +293,99 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   }
 
   Widget _buildBalanceCard(WalletModel wallet) {
-    return Stack(
-      children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(32),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-            colors: wallet.hasPending 
-              ? [Colors.orange.shade800, Colors.orange.shade600] 
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: wallet.hasPending
+              ? [Colors.orange.shade800, Colors.orange.shade600]
               : [const Color(0xFF1A3A5C), const Color(0xFF0D2137)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: (wallet.hasPending ? Colors.orange : AppTheme.primaryColor).withValues(alpha: 0.3),
-                blurRadius: 30,
-                offset: const Offset(0, 15),
-              ),
-            ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: (wallet.hasPending ? Colors.orange : AppTheme.primaryColor).withValues(alpha: 0.3),
+            blurRadius: 30,
+            offset: const Offset(0, 15),
           ),
-          child: Column(
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Total Balance', style: TextStyle(color: Colors.white70, fontSize: 16)),
-                  if (wallet.hasPending)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.history_toggle_off_rounded, color: Colors.white, size: 14),
-                          SizedBox(width: 6),
-                          Text(
-                            'PENDING',
-                            style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+              // Left: label + pending badge
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text('Total Balance', style: TextStyle(color: Colors.white70, fontSize: 16)),
+                        if (wallet.hasPending) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.history_toggle_off_rounded, color: Colors.white, size: 14),
+                                SizedBox(width: 6),
+                                Text(
+                                  'PENDING',
+                                  style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
-                      ),
+                      ],
                     ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '${wallet.totalBalance.toStringAsFixed(8)} BTCS',
-                style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.white),
-              ),
-              if (wallet.hasPending) ...[
-                const SizedBox(height: 8),
-                Text(
-                  'Confirmed: ${wallet.balance.toStringAsFixed(8)} BTCS',
-                  style: const TextStyle(color: Colors.white70, fontSize: 14),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${wallet.totalBalance.toStringAsFixed(8)} BTCS',
+                      style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                    if (wallet.hasPending) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Confirmed: ${wallet.balance.toStringAsFixed(8)} BTCS',
+                        style: const TextStyle(color: Colors.white70, fontSize: 14),
+                      ),
+                      const Text(
+                        'Note: You have unconfirmed transactions. Please wait ~10 min for a block.',
+                        style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ],
                 ),
-                const Text(
-                  'Note: You have unconfirmed transactions. Please wait ~10 min for a block.',
-                  style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
-                ),
-              ],
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  _buildActionButton(Icons.arrow_upward_rounded, 'Send', () => _tabController.index = 1),
-                  const SizedBox(width: 12),
-                  _buildActionButton(Icons.arrow_downward_rounded, 'Receive', () => _tabController.index = 2),
-                ],
+              ),
+              const SizedBox(width: 12),
+              // Right: price widget
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: _buildFloatingPriceWidget(wallet.totalBalance),
               ),
             ],
           ),
-        ),
-        // Floating Price Widget
-        Positioned(
-          top: 24,
-          right: 24,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: _buildFloatingPriceWidget(wallet.totalBalance),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              _buildActionButton(Icons.arrow_upward_rounded, 'Send', () => _tabController.index = 1),
+              const SizedBox(width: 12),
+              _buildActionButton(Icons.arrow_downward_rounded, 'Receive', () => _tabController.index = 2),
+            ],
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
