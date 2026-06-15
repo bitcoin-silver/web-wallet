@@ -26,8 +26,12 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Create dart_defines.json
+        run: |
+          echo '{"LIVECOINWATCH_API_KEY": "${{ secrets.LIVECOINWATCH_API_KEY }}"}' > dart_defines.json
+
       - name: Build web
-        run: flutter build web --release --base-href "/web-wallet/"
+        run: flutter build web --release --base-href "/web-wallet/" --dart-define-from-file=dart_defines.json
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

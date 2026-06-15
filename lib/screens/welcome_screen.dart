@@ -88,7 +88,7 @@ class WelcomeScreen extends StatelessWidget {
                         const SizedBox(height: 10),
                         const Padding(
                                 padding: EdgeInsets.symmetric(horizontal: 16),
-                                child: Text('BTCS Web-Wallet version 2.3', 
+                                child: Text('BTCS Web-Wallet version 2.4', 
                                 style: TextStyle(color: Colors.white54, fontSize: 12),
                                 textAlign: TextAlign.center
                           ),      

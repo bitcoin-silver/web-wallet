@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -7,6 +9,7 @@ import '../providers/wallet_provider.dart';
 import '../theme/app_theme.dart';
 import '../models/wallet_model.dart';
 import '../models/transaction_model.dart';
+import '../services/price_service.dart';
 import 'network_info_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -20,15 +23,32 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   late TabController _tabController;
   final TextEditingController _toController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
+  late Timer _priceUpdateTimer;
+  PriceData? _priceData;
+  bool _priceLoading = true;
+  final PriceService _priceService = PriceService();
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _fetchPrice();
+    _priceUpdateTimer = Timer.periodic(const Duration(minutes: 5), (_) => _fetchPrice());
+  }
+
+  Future<void> _fetchPrice() async {
+    final price = await _priceService.getBTCSPrice();
+    if (mounted) {
+      setState(() {
+        _priceData = price;
+        _priceLoading = false;
+      });
+    }
   }
 
   @override
   void dispose() {
+    _priceUpdateTimer.cancel();
     _tabController.dispose();
     _toController.dispose();
     _amountController.dispose();
@@ -149,6 +169,15 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               child: Text('Support', style: TextStyle(color: Colors.white38, fontSize: 14)),
             ),
             ListTile(
+              onTap: () async {
+                final Uri emailUri = Uri(
+                  scheme: 'mailto',
+                  path: 'info@bitcoinsilver.top',
+                );
+                if (await canLaunchUrl(emailUri)) {
+                  await launchUrl(emailUri);
+                }
+              },
               leading: const Icon(Icons.email_rounded, size: 18, color: Colors.white38),
               title: const Text('info@bitcoinsilver.top', style: TextStyle(fontSize: 14, color: Colors.white54)),
             ),
@@ -264,78 +293,191 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   }
 
   Widget _buildBalanceCard(WalletModel wallet) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(32),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-        colors: wallet.hasPending 
-          ? [Colors.orange.shade800, Colors.orange.shade600] 
-          : [const Color(0xFF1A3A5C), const Color(0xFF0D2137)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: (wallet.hasPending ? Colors.orange : AppTheme.primaryColor).withValues(alpha: 0.3),
-            blurRadius: 30,
-            offset: const Offset(0, 15),
+    return Stack(
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(32),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+            colors: wallet.hasPending 
+              ? [Colors.orange.shade800, Colors.orange.shade600] 
+              : [const Color(0xFF1A3A5C), const Color(0xFF0D2137)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: (wallet.hasPending ? Colors.orange : AppTheme.primaryColor).withValues(alpha: 0.3),
+                blurRadius: 30,
+                offset: const Offset(0, 15),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Total Balance', style: TextStyle(color: Colors.white70, fontSize: 16)),
-              if (wallet.hasPending)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Total Balance', style: TextStyle(color: Colors.white70, fontSize: 16)),
+                  if (wallet.hasPending)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.history_toggle_off_rounded, color: Colors.white, size: 14),
+                          SizedBox(width: 6),
+                          Text(
+                            'PENDING',
+                            style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${wallet.totalBalance.toStringAsFixed(8)} BTCS',
+                style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+              if (wallet.hasPending) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Confirmed: ${wallet.balance.toStringAsFixed(8)} BTCS',
+                  style: const TextStyle(color: Colors.white70, fontSize: 14),
+                ),
+                const Text(
+                  'Note: You have unconfirmed transactions. Please wait ~10 min for a block.',
+                  style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                ),
+              ],
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  _buildActionButton(Icons.arrow_upward_rounded, 'Send', () => _tabController.index = 1),
+                  const SizedBox(width: 12),
+                  _buildActionButton(Icons.arrow_downward_rounded, 'Receive', () => _tabController.index = 2),
+                ],
+              ),
+            ],
+          ),
+        ),
+        // Floating Price Widget
+        Positioned(
+          top: 24,
+          right: 24,
+          child: _buildFloatingPriceWidget(wallet.totalBalance),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFloatingPriceWidget(double btcsBalance) {
+    final usdBalance = _priceData != null ? btcsBalance * _priceData!.price : 0.0;
+    
+    return BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.4),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'BTCS Price',
+              style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 4),
+            if (_priceLoading)
+              const SizedBox(
+                width: 60,
+                height: 20,
+                child: Center(
+                  child: SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
+                    ),
                   ),
-                  child: const Row(
+                ),
+              )
+            else if (_priceData != null)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '\$${_priceData!.price.toStringAsFixed(4)}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.history_toggle_off_rounded, color: Colors.white, size: 14),
-                      SizedBox(width: 6),
+                      Icon(
+                        _priceData!.changePercent24h >= 0
+                            ? Icons.arrow_upward_rounded
+                            : Icons.arrow_downward_rounded,
+                        color: _priceData!.changePercent24h >= 0
+                            ? Colors.greenAccent
+                            : Colors.redAccent,
+                        size: 14,
+                      ),
+                      const SizedBox(width: 4),
                       Text(
-                        'PENDING',
-                        style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                        '${_priceData!.changePercent24h.abs().toStringAsFixed(2)}%',
+                        style: TextStyle(
+                          color: _priceData!.changePercent24h >= 0
+                              ? Colors.greenAccent
+                              : Colors.redAccent,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ],
                   ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '${wallet.totalBalance.toStringAsFixed(8)} BTCS',
-            style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.white),
-          ),
-          if (wallet.hasPending) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Confirmed: ${wallet.balance.toStringAsFixed(8)} BTCS',
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
-            ),
-            const Text(
-              'Note: You have unconfirmed transactions. Please wait ~10 min for a block.',
-              style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
-            ),
+                  const SizedBox(height: 8),
+                  const Divider(height: 1, color: Colors.white24),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Portfolio Value',
+                    style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '\$${usdBalance.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              )
+            else
+              const Text(
+                'N/A',
+                style: TextStyle(color: Colors.white54, fontSize: 14),
+              ),
           ],
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              _buildActionButton(Icons.arrow_upward_rounded, 'Send', () => _tabController.index = 1),
-              const SizedBox(width: 12),
-              _buildActionButton(Icons.arrow_downward_rounded, 'Receive', () => _tabController.index = 2),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -946,7 +1088,7 @@ void _showMigrationDialog(BuildContext context, WalletProvider provider) {
         const SizedBox(height: 10),
         const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Text('BTCS Web-Wallet version 2.3', 
+              child: Text('BTCS Web-Wallet version 2.4', 
               style: TextStyle(color: Colors.white54, fontSize: 12),
               textAlign: TextAlign.center
         ),      

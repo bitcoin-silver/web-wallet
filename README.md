@@ -1,4 +1,7 @@
-# BitcoinSilver Web Wallet v2.3
+# BitcoinSilver Web Wallet v2.4
+
+## Introduction
+
 
 A modern, secure, and modular web wallet for BitcoinSilver (BTCS). This release provides improved architecture, seed phrase support, and safer RPC communication for web deployment.
 
@@ -7,7 +10,7 @@ A modern, secure, and modular web wallet for BitcoinSilver (BTCS). This release 
 </p>
 
 <p align="center">
-  <strong>The Official Web Wallet for BitcoinSilver (BTCS)</strong><br>
+  <strong>The Official Web-Wallet for BitcoinSilver (BTCS)</strong><br>
   Built with Flutter for Web
 </p>
 
@@ -16,7 +19,11 @@ A modern, secure, and modular web wallet for BitcoinSilver (BTCS). This release 
   <a href="https://explorer.bitcoinsilver.top">Explorer</a>
 </p>
 
-## Major Updates in v2.3
+## Major Updates in v2.4
+
+### 💰 Live price update fetched directly from LiveCoinWatch
+- Bitcoin Silver price is aquired directly from LiveCoinWatch and updated every 5 minutes.
+- Wallet balance is converted in USD and displayed to keep user informed about price fluctuations.
 
 ### 🏗️ Modular Architecture
 The project has been refactored from a monolithic structure to a scalable, modular architecture using the **Provider** pattern:
@@ -69,18 +76,18 @@ A new dashboard to monitor the BTCS network health directly within the wallet:
 
 Run locally:
 ```bash
-flutter run -d chrome
+flutter run -d chrome --dart-define-from-file=dart_defines.json
 ```
 or
 ```bash
-flutter run -d web-server --web-port 8080
+flutter run -d web-server --web-port 8080 --dart-define-from-file=dart_defines.json
 ```
 
 ## Building for Deployment
 
 Build the web app:
 ```bash
-flutter build web --release --base-href "/web-wallet/"
+flutter build web --release --base-href "/web-wallet/" --dart-define-from-file=dart_defines.json
 ```
 
 ## RPC Configuration
