@@ -374,7 +374,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           top: 24,
           right: 24,
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(16),
             child: _buildFloatingPriceWidget(wallet.totalBalance),
           ),
         ),
@@ -423,7 +423,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Text(
-                    '${_priceData!.price.toStringAsFixed(4)} \$USD',
+                    '${_priceData!.price.toStringAsFixed(6)} \$',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
@@ -445,7 +445,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        '${_priceData!.changePercent24h.abs().toStringAsFixed(2)}%',
+                        '${_priceData!.changePercent24h.abs().toStringAsFixed(2)} %',
                         style: TextStyle(
                           color: _priceData!.changePercent24h >= 0
                               ? Colors.greenAccent
@@ -465,7 +465,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${usdBalance.toStringAsFixed(2)} \$USD',
+                    '${usdBalance.toStringAsFixed(2)} \$',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16,

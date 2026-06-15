@@ -16,6 +16,22 @@ class PriceData {
   });
 }
 
+double _parseDelta(Map<String, dynamic>? delta) {
+  if (delta == null) return 0.0;
+  
+  // Try day first, then hour (scaled), then week as last resort
+  final day = delta['day'];
+  if (day != null) return ((day as num).toDouble() - 1.0) * 100;
+
+  final hour = delta['hour'];
+  if (hour != null) return ((hour as num).toDouble() - 1.0) * 100;
+
+  final week = delta['week'];
+  if (week != null) return ((week as num).toDouble() - 1.0) * 100;
+
+  return 0.0;
+}
+
 class PriceService {
   Future<PriceData?> getBTCSPrice({String currency = 'USD'}) async {
     try {
@@ -40,7 +56,7 @@ class PriceService {
           price: (data['rate'] as num).toDouble(),
           currency: currency,
           lastUpdated: DateTime.now(),
-          changePercent24h: (data['delta']?['day'] as num?)?.toDouble() ?? 0.0,
+          changePercent24h: _parseDelta(data['delta']),
         );
       } else {
         print('Error fetching price: ${response.statusCode}');
