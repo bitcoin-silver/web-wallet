@@ -373,7 +373,10 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         Positioned(
           top: 24,
           right: 24,
-          child: _buildFloatingPriceWidget(wallet.totalBalance),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: _buildFloatingPriceWidget(wallet.totalBalance),
+          ),
         ),
       ],
     );
