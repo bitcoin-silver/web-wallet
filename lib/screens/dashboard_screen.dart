@@ -219,7 +219,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                wallet.type == WalletType.seed ? 'Modern Web-Wallet' : 'Legacy Web-Wallet',
+                wallet.type == WalletType.seed ? 'Modern Seed Phrase Wallet' : 'Legacy WIF Wallet',
                 style: const TextStyle(color: Colors.white54, fontSize: 14),
               ),
               const SizedBox(height: 4),
@@ -233,7 +233,14 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             ],
           ),
           IconButton(
-            onPressed: provider.refreshBalance,
+            onPressed: () {
+              provider.refreshBalance();
+              setState(() {
+                  _priceLoading = true;
+                  _priceData = null;
+              });
+              _fetchPrice();
+            },
             icon: const Icon(Icons.refresh_rounded),
             tooltip: 'Refresh Balance',
           ),
@@ -372,16 +379,22 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               // Right: price widget
               ClipRRect(
                 borderRadius: BorderRadius.circular(16),
-                child: _buildFloatingPriceWidget(wallet.totalBalance),
+                child: Tooltip(
+                  message: _priceData != null
+                      ? 'Price updated from LiveCoinWatch\n'
+                          '• 24h change: ${_priceData!.changePercent24h.toStringAsFixed(2)}%'
+                      : 'Price data unavailable',
+                  child: _buildFloatingPriceWidget(wallet.totalBalance),
+                ),
               ),
             ],
           ),
           const SizedBox(height: 24),
           Row(
             children: [
-              _buildActionButton(Icons.arrow_upward_rounded, 'Send', () => _tabController.index = 1),
+              _buildActionButton(Icons.arrow_upward_rounded, 'Send', () => _tabController.index = 1, tooltip: 'Send coins'),
               const SizedBox(width: 12),
-              _buildActionButton(Icons.arrow_downward_rounded, 'Receive', () => _tabController.index = 2),
+              _buildActionButton(Icons.arrow_downward_rounded, 'Receive', () => _tabController.index = 2, tooltip: 'Receive coins'),
             ],
           ),
         ],
@@ -483,7 +496,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               )
             else
               const Text(
-                'N/A',
+                'data unavailable',
                 style: TextStyle(color: Colors.white54, fontSize: 14),
               ),
           ],
@@ -492,8 +505,10 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     );
   }
 
-  Widget _buildActionButton(IconData icon, String label, VoidCallback onTap) {
-    return ElevatedButton.icon(
+Widget _buildActionButton(IconData icon, String label, VoidCallback onTap, {String? tooltip}) {
+  return Tooltip(
+    message: tooltip ?? label,
+    child: ElevatedButton.icon(
       onPressed: onTap,
       icon: Icon(icon, size: 18),
       label: Text(label),
@@ -503,8 +518,9 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         elevation: 0,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildAssetItem(String symbol, String name, double balance, String iconPath) {
     return Card(
