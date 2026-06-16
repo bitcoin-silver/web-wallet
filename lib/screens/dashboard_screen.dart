@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/foundation.dart';
 import '../providers/wallet_provider.dart';
 import '../theme/app_theme.dart';
 import '../models/wallet_model.dart';
@@ -17,6 +18,74 @@ class DashboardScreen extends StatefulWidget {
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class SparklinePainter extends CustomPainter {
+  final List<double> points;
+
+  SparklinePainter(this.points);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.length < 2) return;
+
+    final min = points.reduce((a, b) => a < b ? a : b);
+    final max = points.reduce((a, b) => a > b ? a : b);
+    final range = (max - min).abs();
+
+    List<Offset> offsets = List.generate(points.length, (i) {
+      final x = i / (points.length - 1) * size.width;
+      final y = range == 0
+          ? size.height / 2
+          : size.height - ((points[i] - min) / range * size.height * 0.8 + size.height * 0.1);
+      return Offset(x, y);
+    });
+
+    final linePaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.5)
+      ..strokeWidth = 1.8
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    final path = Path()..moveTo(offsets.first.dx, offsets.first.dy);
+    for (final o in offsets.skip(1)) {
+      path.lineTo(o.dx, o.dy);
+    }
+    canvas.drawPath(path, linePaint);
+
+    // shadow fill below the line
+    final fillPath = Path()..moveTo(offsets.first.dx, offsets.first.dy);
+    for (final o in offsets.skip(1)) {
+      fillPath.lineTo(o.dx, o.dy);
+    }
+    fillPath
+      ..lineTo(offsets.last.dx, size.height)
+      ..lineTo(offsets.first.dx, size.height)
+      ..close();
+
+    final fillPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Colors.white.withValues(alpha: 0.18),
+          Colors.white.withValues(alpha: 0.0),
+        ],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+    canvas.drawPath(fillPath, fillPaint);
+
+    // dot at the latest point
+    canvas.drawCircle(
+      offsets.last,
+      3,
+      Paint()..color = Colors.white.withValues(alpha: 0.8),
+    );
+  }
+
+  @override
+ @override
+  bool shouldRepaint(SparklinePainter old) => !listEquals(old.points, points);
 }
 
 class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProviderStateMixin {
@@ -281,7 +350,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildBalanceCard(wallet),
+          _buildBalanceCard(wallet, provider),
           const SizedBox(height: 40),
           const Text('Your Assets', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 20),
@@ -299,7 +368,27 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     );
   }
 
-  Widget _buildBalanceCard(WalletModel wallet) {
+    List<double> _buildSparklinePoints(WalletModel wallet, List<TransactionModel> txs) {
+  if (txs.isEmpty) return [];
+
+  // take up to 10, oldest first
+  final slice = txs.take(10).toList().reversed.toList();
+  double running = wallet.totalBalance;
+
+  // walk backwards from current balance to reconstruct history
+  final points = <double>[running];
+  for (final tx in slice) {
+    if (tx.direction == TxDirection.sent) {
+      running += tx.amount; // undo the send
+    } else if (tx.direction == TxDirection.received) {
+      running -= tx.amount; // undo the receive
+    }
+    points.insert(0, running.clamp(0, double.infinity));
+  }
+  return points;
+}
+
+  Widget _buildBalanceCard(WalletModel wallet, WalletProvider provider) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(32),
@@ -389,7 +478,18 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               ),
             ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
+          Builder(builder: (_) {
+            final pts = _buildSparklinePoints(wallet, provider.transactions);
+            if (pts.length >= 2)
+              return SizedBox(
+                height: 40,
+                width: double.infinity,
+                child: CustomPaint(painter: SparklinePainter(pts)),
+              );
+            return const SizedBox.shrink();
+          }),
+          const SizedBox(height: 16),
           Row(
             children: [
               _buildActionButton(Icons.arrow_upward_rounded, 'Send', () => _tabController.index = 1, tooltip: 'Send coins'),
