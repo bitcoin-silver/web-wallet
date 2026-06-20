@@ -199,7 +199,7 @@ class WalletService {
       throw Exception('Invalid RPC response format received');
     } catch (e) {
       // 🚨 CRITICAL: Do NOT return null. Rethrow the error so that upper layers
-      // (like _isRpcAvailable or your try-catch blocks) know the connection is dead!
+      // (like _isRpcAvailable or try-catch blocks) know the connection is dead!
       rethrow;
     }
   }
@@ -217,16 +217,27 @@ class WalletService {
       [{'desc': 'addr($address)'}]
     ]);
 
+    // Fetch current block height
+    int currentHeight = 0;
+    final blockCountResult = await rpcRequest(rpcUrl, rpcUser, rpcPassword, 'getblockcount');
+    if (blockCountResult != null && blockCountResult['result'] != null) {
+      currentHeight = (blockCountResult['result'] as num).toInt();
+    }
+
     final List<Map<String, dynamic>> confirmedUtxos = [];
     if (result != null && result['result'] != null) {
       final unspents = result['result']['unspents'] as List<dynamic>? ?? [];
       for (var u in unspents) {
+        final int utxoHeight = (u['height'] as num).toInt();
+        final int conf = currentHeight > 0 && utxoHeight > 0
+            ? currentHeight - utxoHeight + 1
+            : 1;
         confirmedUtxos.add({
           'txid': u['txid'],
           'vout': u['vout'],
           'amount': (u['amount'] as num).toDouble(),
-          'height': u['height'],
-          'confirmations': 1,
+          'height': utxoHeight,
+          'confirmations': conf,
         });
       }
     }
@@ -331,7 +342,9 @@ class WalletService {
     String privateKeyWif,
     String fromAddress,
     String toAddress,
-    double amount,
+    double amount,{
+      List<Map<String, dynamic>>? preSelectedUtxos
+    }
   ) async {
     // Get UTXOs (Filter out pending marker)
     final allUtxos = await getUtxos(rpcUrl, rpcUser, rpcPassword, fromAddress);

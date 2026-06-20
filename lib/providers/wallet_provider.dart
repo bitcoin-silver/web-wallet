@@ -30,6 +30,65 @@ class WalletProvider with ChangeNotifier {
   List<TransactionModel> get visibleTransactions => _transactions;
   bool get hasMoreTransactions => _transactions.length < _txCount;
   bool get isLoadingTxs => _isLoadingTxs;
+  // Coin control state
+  List<Map<String, dynamic>> _availableUtxos = [];
+  Set<String> _selectedUtxoKeys = {}; // "txid:vout"
+  bool _isLoadingUtxos = false;
+  int _utxoPage = 0;
+  static const int _utxosPerPage = 15;
+
+  List<Map<String, dynamic>> get availableUtxos => _availableUtxos;
+  Set<String> get selectedUtxoKeys => _selectedUtxoKeys;
+  bool get isLoadingUtxos => _isLoadingUtxos;
+  int get utxoPage => _utxoPage;
+  int get utxoPageCount => (_availableUtxos.isEmpty) ? 1 : (_availableUtxos.length / _utxosPerPage).ceil();
+
+  List<Map<String, dynamic>> get currentPageUtxos {
+    final start = _utxoPage * _utxosPerPage;
+    final end = (start + _utxosPerPage).clamp(0, _availableUtxos.length);
+    return _availableUtxos.sublist(start, end);
+  }
+
+  double get selectedUtxoTotal => _availableUtxos
+      .where((u) => _selectedUtxoKeys.contains('${u['txid']}:${u['vout']}'))
+      .fold(0.0, (sum, u) => sum + (u['amount'] as num).toDouble());
+
+  int get selectedUtxoCount => _selectedUtxoKeys.length;
+
+  List<Map<String, dynamic>> get selectedUtxoList => _availableUtxos
+      .where((u) => _selectedUtxoKeys.contains('${u['txid']}:${u['vout']}'))
+      .toList();
+
+  double _feeRate = 0.00001;
+
+  double get estimatedFee {
+    if (_selectedUtxoKeys.isEmpty) return 0.0;
+    final inputCount = _selectedUtxoKeys.length;
+    final txSize = 10 + (inputCount * 148) + 2 * 34;
+    return double.parse((_feeRate * txSize / 1000).toStringAsFixed(8));
+  }
+
+  double get estimatedNetSend {
+    final net = selectedUtxoTotal - estimatedFee;
+    return net > 0 ? net : 0.0;
+  }
+
+// Typical 1-in 2-out tx = 10 + 148 + 68 = 226 bytes
+  double get estimatedSimpleFee =>
+    double.parse((_feeRate * 226 / 1000).toStringAsFixed(8));
+
+    Future<void> fetchFeeRate() async {
+    try {
+      final feeResult = await _walletService.rpcRequest(
+        _rpcUrl, _rpcUser, _rpcPassword, 'estimatesmartfee', [6]);
+      if (feeResult != null &&
+          feeResult['result'] != null &&
+          feeResult['result']['feerate'] != null) {
+        _feeRate = (feeResult['result']['feerate'] as num).toDouble();
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
 
   Future<void> loadMoreTransactions() async {
     if (_wallet == null || _isLoadingTxs || !hasMoreTransactions) return;
@@ -211,6 +270,7 @@ Future<void> refreshBalance() async {
       _wallet!.address,
       toAddress,
       amount,
+      preSelectedUtxos: _selectedUtxoKeys.isNotEmpty ? selectedUtxoList : null,
     );
 
     _isLoading = false;
@@ -231,6 +291,79 @@ Future<void> refreshBalance() async {
     } else {
       _message = '❌ ${result['message']}';
       notifyListeners();
+      return false;
+    }
+  }
+
+  Future<void> fetchUtxosForCoinControl() async {
+    if (_wallet == null) return;
+    _isLoadingUtxos = true;
+    _availableUtxos = [];
+    _selectedUtxoKeys = {};
+    _utxoPage = 0;
+    notifyListeners();
+
+    try {
+      final all = await _walletService.getUtxos(
+        _rpcUrl, _rpcUser, _rpcPassword, _wallet!.address,
+      );
+      _availableUtxos = all
+          .where((u) => u['txid'] != 'pending_marker' && (u['confirmations'] as int) > 0)
+          .toList();
+      _availableUtxos.sort((a, b) =>
+          (b['amount'] as num).toDouble().compareTo((a['amount'] as num).toDouble()));
+
+      await fetchFeeRate();
+    } catch (_) {
+    } finally {
+      _isLoadingUtxos = false;
+      notifyListeners();
+    }
+  }
+
+  void toggleUtxo(String key) {
+    if (_selectedUtxoKeys.contains(key)) {
+      _selectedUtxoKeys.remove(key);
+    } else {
+      _selectedUtxoKeys.add(key);
+    }
+    notifyListeners();
+  }
+
+  void selectAllUtxos() {
+    _selectedUtxoKeys = _availableUtxos
+        .map((u) => '${u['txid']}:${u['vout']}')
+        .toSet();
+    notifyListeners();
+  }
+
+  void clearUtxoSelection() {
+    _selectedUtxoKeys = {};
+    notifyListeners();
+  }
+
+  void setUtxoPage(int page) {
+    _utxoPage = page;
+    notifyListeners();
+  }
+
+  // Call this when send view closes, to reset state
+  void resetCoinControl() {
+    _availableUtxos = [];
+    _selectedUtxoKeys = {};
+    _utxoPage = 0;
+    _isLoadingUtxos = false;
+  }
+
+  Future<bool> validateAddress(String address) async {
+    if (address.isEmpty) return false;
+    try {
+      final result = await _walletService.rpcRequest(
+        _rpcUrl, _rpcUser, _rpcPassword, 'validateaddress', [address]);
+      return result != null &&
+          result['result'] != null &&
+          result['result']['isvalid'] == true;
+    } catch (_) {
       return false;
     }
   }

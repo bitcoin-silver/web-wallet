@@ -95,7 +95,11 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   late Timer _priceUpdateTimer;
   PriceData? _priceData;
   bool _priceLoading = true;
+  bool _advancedSend = false;
   final PriceService _priceService = PriceService();
+  bool? _addressValid;       // null = unchecked, true = valid, false = invalid
+  bool _isValidatingAddress = false;
+  Timer? _addressDebounce;
 
   @override
   void initState() {
@@ -103,6 +107,13 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     _tabController = TabController(length: 4, vsync: this);
     _fetchPrice();
     _priceUpdateTimer = Timer.periodic(const Duration(minutes: 5), (_) => _fetchPrice());
+    _amountController.addListener(() => setState(() {})); // triggers rebuild on type
+    _tabController.addListener(() {
+      if (_tabController.index == 1) { // 1 = Send tab
+        final provider = context.read<WalletProvider>();
+        provider.fetchFeeRate();
+      }
+    });
   }
 
   Future<void> _fetchPrice() async {
@@ -121,6 +132,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     _tabController.dispose();
     _toController.dispose();
     _amountController.dispose();
+    _addressDebounce?.cancel();
     super.dispose();
   }
 
@@ -182,7 +194,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                                     ],
                                   ),
                                 )
-                              : _buildMessage(provider.message), // Fallback to your custom message styling for normal info
+                              : _buildMessage(provider.message), // Fallback to custom message styling for normal info
                         ),
                       Expanded(
                         child: TabBarView(
@@ -350,12 +362,13 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Balance Card ────────────────────────────────────────────
           _buildBalanceCard(wallet, provider),
           const SizedBox(height: 40),
           const Text('Your Assets', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 20),
           _buildAssetItem('BTCS', 'Bitcoin Silver', wallet.balance, 'assets/logo_btcs.png'),
-          // ── Transaction History ──────────────────────────────────────────
+          // ── Transaction History ─────────────────────────────────────
           const SizedBox(height: 40),
           _buildTransactionHistory(provider),
           // ── Migration Card ──────────────────────────────────────────
@@ -368,25 +381,25 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     );
   }
 
-    List<double> _buildSparklinePoints(WalletModel wallet, List<TransactionModel> txs) {
-  if (txs.isEmpty) return [];
+  List<double> _buildSparklinePoints(WalletModel wallet, List<TransactionModel> txs) {
+    if (txs.isEmpty) return [];
 
-  // take up to 10, oldest first
-  final slice = txs.take(10).toList().reversed.toList();
-  double running = wallet.totalBalance;
+    // take up to 10, oldest first
+    final slice = txs.take(10).toList().reversed.toList();
+    double running = wallet.totalBalance;
 
-  // walk backwards from current balance to reconstruct history
-  final points = <double>[running];
-  for (final tx in slice) {
-    if (tx.direction == TxDirection.sent) {
-      running += tx.amount; // undo the send
-    } else if (tx.direction == TxDirection.received) {
-      running -= tx.amount; // undo the receive
+    // walk backwards from current balance to reconstruct history
+    final points = <double>[running];
+    for (final tx in slice) {
+      if (tx.direction == TxDirection.sent) {
+        running += tx.amount; // undo the send
+      } else if (tx.direction == TxDirection.received) {
+        running -= tx.amount; // undo the receive
+      }
+      points.insert(0, running.clamp(0, double.infinity));
     }
-    points.insert(0, running.clamp(0, double.infinity));
+    return points;
   }
-  return points;
-}
 
   Widget _buildBalanceCard(WalletModel wallet, WalletProvider provider) {
     return Container(
@@ -605,22 +618,22 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     );
   }
 
-Widget _buildActionButton(IconData icon, String label, VoidCallback onTap, {String? tooltip}) {
-  return Tooltip(
-    message: tooltip ?? label,
-    child: ElevatedButton.icon(
-      onPressed: onTap,
-      icon: Icon(icon, size: 18),
-      label: Text(label),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.white.withValues(alpha: 0.2),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+  Widget _buildActionButton(IconData icon, String label, VoidCallback onTap, {String? tooltip}) {
+    return Tooltip(
+      message: tooltip ?? label,
+      child: ElevatedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 18),
+        label: Text(label),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white.withValues(alpha: 0.2),
+          foregroundColor: Colors.white,
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildAssetItem(String symbol, String name, double balance, String iconPath) {
     return Card(
@@ -954,109 +967,111 @@ Widget _buildActionButton(IconData icon, String label, VoidCallback onTap, {Stri
 
 int _migrationSeedWords = 12;
 
-void _showMigrationDialog(BuildContext context, WalletProvider provider) {
-  final isEmpty = provider.wallet!.balance <= 0.00001;
-  final dashboardContext = context;
+  void _showMigrationDialog(BuildContext context, WalletProvider provider) {
+    final isEmpty = provider.wallet!.balance <= 0.00001;
+    final dashboardContext = context;
 
-  showDialog(
-    context: dashboardContext,
-    builder: (dialogContext) => StatefulBuilder(
-      builder: (statefulContext, setDialogState) => AlertDialog(
-        title: isEmpty
-            ? const Text('Switch to Seed Phrase')
-            : Row(
-                children: const [
-                  Icon(Icons.warning_amber_rounded, color: Colors.red),
-                  SizedBox(width: 12),
-                  Expanded(child: Text('Confirm Migration')),
-                ],
-              ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.error_outline_rounded, color: Colors.redAccent),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      isEmpty
-                          ? 'NOTICE: This will generate a NEW seed phrase. No funds will be moved. BACKUP the generated seed phrase IMMEDIATELY ! after migration.'
-                          : 'WARNING: This will MOVE ALL FUNDS to a NEW address. BACKUP the generated seed phrase IMMEDIATELY ! \n This action is irreversible. If you FAIL TO BACKUP the new seed phrase, you will LOSE ACCESS to your funds FOREVER.',
-                      style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
+    showDialog(
+      context: dashboardContext,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (statefulContext, setDialogState) => AlertDialog(
+          title: isEmpty
+              ? const Text('Switch to Seed Phrase')
+              : Row(
+                  children: const [
+                    Icon(Icons.warning_amber_rounded, color: Colors.red),
+                    SizedBox(width: 12),
+                    Expanded(child: Text('Confirm Migration')),
+                  ],
+                ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.error_outline_rounded, color: Colors.redAccent),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        isEmpty
+                            ? 'NOTICE: This will generate a NEW seed phrase. No funds will be moved. BACKUP the generated seed phrase IMMEDIATELY ! after migration.'
+                            : 'WARNING: This will MOVE ALL FUNDS to a NEW address. BACKUP the generated seed phrase IMMEDIATELY ! \n This action is irreversible. If you FAIL TO BACKUP the new seed phrase, you will LOSE ACCESS to your funds FOREVER.',
+                        style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
+                      ),
                     ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                isEmpty
+                    ? 'Your current wallet is empty. We will simply generate a NEW seed phrase wallet for you to use going forward.'
+                    : 'This will generate a NEW seed phrase and send ALL your funds to the new address. '
+                        'You MUST backup the new seed phrase immediately after migration.\n\n'
+                        'A small network fee will apply.',
+              ),
+              const SizedBox(height: 20),
+              const Text('Choose New Seed Length:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ChoiceChip(
+                    label: const Text('12 Words'),
+                    selected: _migrationSeedWords == 12,
+                    onSelected: (selected) {
+                      if (selected) setDialogState(() => _migrationSeedWords = 12);
+                    },
+                  ),
+                  const SizedBox(width: 12),
+                  ChoiceChip(
+                    label: const Text('24 Words'),
+                    selected: _migrationSeedWords == 24,
+                    onSelected: (selected) {
+                      if (selected) setDialogState(() => _migrationSeedWords = 24);
+                    },
                   ),
                 ],
               ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
             ),
-            const SizedBox(height: 12),
-            Text(
-              isEmpty
-                  ? 'Your current wallet is empty. We will simply generate a NEW seed phrase wallet for you to use going forward.'
-                  : 'This will generate a NEW seed phrase and send ALL your funds to the new address. '
-                      'You MUST backup the new seed phrase immediately after migration.\n\n'
-                      'A small network fee will apply.',
-            ),
-            const SizedBox(height: 20),
-            const Text('Choose New Seed Length:', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                ChoiceChip(
-                  label: const Text('12 Words'),
-                  selected: _migrationSeedWords == 12,
-                  onSelected: (selected) {
-                    if (selected) setDialogState(() => _migrationSeedWords = 12);
-                  },
-                ),
-                const SizedBox(width: 12),
-                ChoiceChip(
-                  label: const Text('24 Words'),
-                  selected: _migrationSeedWords == 24,
-                  onSelected: (selected) {
-                    if (selected) setDialogState(() => _migrationSeedWords = 24);
-                  },
-                ),
-              ],
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(dialogContext);
+                final success = await provider.migrateToSeed(words: _migrationSeedWords);
+                if (success && dashboardContext.mounted) {
+                  _showBackupDialog(dashboardContext, provider);
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isEmpty ? AppTheme.primaryColor : Colors.orange,
+                foregroundColor: isEmpty ? Colors.white : Colors.black,
+              ),
+              child: Text(isEmpty ? 'Generate Seed Wallet' : 'Generate Seed & Sweep'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(dialogContext);
-              final success = await provider.migrateToSeed(words: _migrationSeedWords);
-              if (success && dashboardContext.mounted) {
-                _showBackupDialog(dashboardContext, provider);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: isEmpty ? AppTheme.primaryColor : Colors.orange,
-              foregroundColor: isEmpty ? Colors.white : Colors.black,
-            ),
-            child: Text(isEmpty ? 'Generate Seed Wallet' : 'Generate Seed & Sweep'),
-          ),
-        ],
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildSendTab(WalletProvider provider) {
+    final amountErr = _amountError(provider);
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Center(
@@ -1065,48 +1080,399 @@ void _showMigrationDialog(BuildContext context, WalletProvider provider) {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('Send Assets', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Send Assets',
+                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                  ToggleButtons(
+                    isSelected: [!_advancedSend, _advancedSend],
+                    onPressed: (index) {
+                      final goAdvanced = index == 1;
+                      setState(() => _advancedSend = goAdvanced);
+                      if (goAdvanced) {
+                        provider.fetchUtxosForCoinControl();
+                      } else {
+                        provider.resetCoinControl();
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    children: const [
+                      Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Text('Simple')),
+                      Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Text('Advanced')),
+                    ],
+                  ),
+                ],
+              ),
               const SizedBox(height: 32),
+
+              // Address field with live RPC validation
               TextField(
                 controller: _toController,
-                decoration: const InputDecoration(
+                onChanged: (value) {
+                  _addressDebounce?.cancel();
+                  setState(() {
+                    _addressValid = null;
+                    _isValidatingAddress = value.isNotEmpty;
+                  });
+                  if (value.isEmpty) return;
+                  _addressDebounce = Timer(const Duration(milliseconds: 700), () async {
+                    final valid = await provider.validateAddress(value.trim());
+                    setState(() {
+                      _addressValid = valid;
+                      _isValidatingAddress = false;
+                    });
+                  });
+                },
+                decoration: InputDecoration(
                   labelText: 'Recipient Address',
                   hintText: 'bs1...',
+                  suffixIcon: _isValidatingAddress
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: SizedBox(
+                            width: 16, height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : _addressValid == null
+                          ? null
+                          : Icon(
+                              _addressValid! ? Icons.check_circle : Icons.cancel,
+                              color: _addressValid! ? Colors.green : Colors.red,
+                            ),
+                  errorText: _addressValid == false ? 'Invalid address' : null,
                 ),
               ),
               const SizedBox(height: 20),
+
+              // Amount field
               TextField(
                 controller: _amountController,
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
                   labelText: 'Amount (BTCS)',
                   hintText: '0.00000000',
+                  errorText: _amountError(provider),
                   suffixIcon: TextButton(
-                    onPressed: () => _amountController.text = provider.wallet!.balance.toString(),
+                    onPressed: () {
+                      _amountController.text = _advancedSend && provider.selectedUtxoCount > 0
+                          ? provider.selectedUtxoTotal.toStringAsFixed(8)
+                          : provider.wallet!.balance.toString();
+                    },
                     child: const Text('MAX'),
                   ),
                 ),
               ),
-              const SizedBox(height: 40),
-              ElevatedButton(
-                onPressed: provider.isLoading ? null : () async {
-                   final amount = double.tryParse(_amountController.text);
-                   if (amount != null) {
-                     final success = await provider.sendTransaction(_toController.text.trim(), amount);
-                     if (success) {
-                        _toController.clear();
-                        _amountController.clear();
-                     }
-                   }
+
+              // Fee estimate (both modes)
+              Consumer<WalletProvider>(
+                builder: (context, provider, _) {
+                  final fee = _advancedSend && provider.selectedUtxoCount > 0
+                      ? provider.estimatedFee
+                      : provider.estimatedSimpleFee;
+                  final label = _advancedSend && provider.selectedUtxoCount > 0
+                      ? 'Est. fee'
+                      : 'Est. fee (typical tx)';
+                  if (fee <= 0) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 6, left: 4),
+                    child: Text(
+                      '$label: ${fee.toStringAsFixed(8)} BTCS',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  );
                 },
-                style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 64)),
-                child: provider.isLoading 
+              ),
+
+              if (_advancedSend) ...[
+                const SizedBox(height: 32),
+                _buildUtxoSelector(provider),
+              ],
+              if (_advancedSend && provider.selectedUtxoCount > 0) ...[
+                const SizedBox(height: 16),
+                _buildFeeEstimate(provider),
+              ],
+              const SizedBox(height: 40),
+
+              ElevatedButton(
+                onPressed: provider.isLoading || amountErr != null || _addressValid == false || _isValidatingAddress
+                    ? null
+                    : () async {
+                        final amount = double.tryParse(_amountController.text);
+                        if (amount != null) {
+                          final success = await provider.sendTransaction(
+                            _toController.text.trim(),
+                            amount,
+                          );
+                          if (success) {
+                            _toController.clear();
+                            _amountController.clear();
+                            setState(() {
+                              _addressValid = null;
+                              if (_advancedSend) _advancedSend = false;
+                            });
+                            provider.resetCoinControl();
+                          }
+                        }
+                      },
+                style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 64)),
+                child: provider.isLoading
                     ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text('Send Transaction', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    : const Text('Send Transaction',
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  String? _amountError(WalletProvider provider) {
+    final text = _amountController.text.trim();
+    if (text.isEmpty) return null;
+    final value = double.tryParse(text);
+    if (value == null) return 'Invalid number';
+    if (value <= 0) return 'Amount must be greater than zero';
+    if (value < 0.00000546) return 'Amount below dust threshold (0.00000546 BTCS)';
+    if (_advancedSend && provider.selectedUtxoCount > 0 && value > provider.selectedUtxoTotal) {
+      return 'Exceeds selected inputs (${provider.selectedUtxoTotal.toStringAsFixed(8)} BTCS)';
+    }
+    if (!_advancedSend && value > (provider.wallet?.balance ?? 0)) {
+      return 'Exceeds available balance';
+    }
+    return null;
+  }
+
+  void _syncAmountToSelection(WalletProvider provider) {
+    if (!_advancedSend) return;
+    final total = provider.selectedUtxoTotal;
+    _amountController.text = total > 0 ? total.toStringAsFixed(8) : '';
+  }
+
+  Widget _buildUtxoSelector(WalletProvider provider) {
+    if (provider.isLoadingUtxos) {
+      return const Padding(
+        padding: EdgeInsets.all(32),
+        child: Column(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 12),
+            Text('Scanning UTXOs...', style: TextStyle(color: Colors.grey)),
+          ],
+        ),
+      );
+    }
+
+    if (provider.availableUtxos.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(32),
+        child: Center(
+          child: Text('No confirmed UTXOs found.',
+              style: TextStyle(color: Colors.grey)),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Header
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Select Inputs  (${provider.availableUtxos.length} total)',
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+            ),
+            Row(
+              children: [
+                TextButton(onPressed: () {
+                  provider.selectAllUtxos();
+                  _syncAmountToSelection(provider);
+                }, child: const Text('All')),
+                TextButton(onPressed: () {
+                  provider.clearUtxoSelection();
+                  _syncAmountToSelection(provider);
+                }, child: const Text('None')),
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+
+        // Summary bar
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 200),
+          child: provider.selectedUtxoCount > 0
+              ? Container(
+                  key: const ValueKey('summary'),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  margin: const EdgeInsets.only(bottom: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withOpacity(0.1),
+                    border: Border.all(color: Colors.amber.withOpacity(0.4)),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle_outline, size: 16, color: Colors.amber),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${provider.selectedUtxoCount} input${provider.selectedUtxoCount > 1 ? 's' : ''}'
+                        '  ·  ${provider.selectedUtxoTotal.toStringAsFixed(8)} BTCS',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ],
+                  ),
+                )
+              : const SizedBox(key: ValueKey('empty')),
+        ),
+
+        // Column headers
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(8),
+              topRight: Radius.circular(8),
+            ),
+          ),
+          child: Row(
+            children: const [
+              SizedBox(width: 32, child: Text('#', style: TextStyle(fontSize: 12, color: Colors.grey))),
+              Expanded(flex: 3, child: Text('TXID : vout', style: TextStyle(fontSize: 12, color: Colors.grey))),
+              Expanded(flex: 2, child: Text('Amount', style: TextStyle(fontSize: 12, color: Colors.grey), textAlign: TextAlign.right)),
+              SizedBox(width: 52, child: Text('Conf', style: TextStyle(fontSize: 12, color: Colors.grey), textAlign: TextAlign.center)),
+              SizedBox(width: 36),
+            ],
+          ),
+        ),
+
+        // Fixed-height scrollable UTXO list
+        SizedBox(
+          height: 360,
+          child: SingleChildScrollView(
+            child: Column(
+              children: provider.availableUtxos.asMap().entries.map((entry) {
+                final i = entry.key;
+                final utxo = entry.value;
+                final key = '${utxo['txid']}:${utxo['vout']}';
+                final isSelected = provider.selectedUtxoKeys.contains(key);
+                final txid = utxo['txid'] as String;
+                final txidShort = '${txid.substring(0, 8)}…${txid.substring(txid.length - 6)}:${utxo['vout']}';
+
+                return InkWell(
+                  onTap: () {
+                    provider.toggleUtxo(key);
+                    _syncAmountToSelection(provider);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? Colors.amber.withOpacity(0.07)
+                          : (i.isOdd ? Colors.white.withOpacity(0.02) : Colors.transparent),
+                      border: Border(
+                        bottom: BorderSide(color: Colors.white.withOpacity(0.05)),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 32,
+                          child: Text('${i + 1}',
+                              style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                        ),
+                        Expanded(
+                          flex: 3,
+                          child: Text(
+                            txidShort,
+                            style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            (utxo['amount'] as num).toStringAsFixed(8),
+                            style: const TextStyle(fontSize: 12),
+                            textAlign: TextAlign.right,
+                          ),
+                        ),
+                        SizedBox(
+                          width: 52,
+                          child: Text(
+                            '${utxo['confirmations']}',
+                            style: const TextStyle(fontSize: 12, color: Colors.grey),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                        SizedBox(
+                          width: 36,
+                          child: Checkbox(
+                            value: isSelected,
+                            onChanged: (_) {
+                              provider.toggleUtxo(key);
+                              _syncAmountToSelection(provider);
+                            },
+                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFeeEstimate(WalletProvider provider) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Est. fee', style: TextStyle(fontSize: 11, color: Colors.grey)),
+              const SizedBox(height: 2),
+              Text(
+                '${provider.estimatedFee.toStringAsFixed(8)} BTCS',
+                style: const TextStyle(fontSize: 13),
+              ),
+            ],
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              const Text('Net send', style: TextStyle(fontSize: 11, color: Colors.grey)),
+              const SizedBox(height: 2),
+              Text(
+                provider.estimatedNetSend > 0
+                    ? '${provider.estimatedNetSend.toStringAsFixed(8)} BTCS'
+                    : '—',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: provider.estimatedNetSend > 0 ? Colors.white : Colors.red,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -1214,7 +1580,7 @@ void _showMigrationDialog(BuildContext context, WalletProvider provider) {
         const SizedBox(height: 10),
         const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Text('BTCS Web-Wallet version 2.4', 
+              child: Text('BTCS Web-Wallet version 2.5', 
               style: TextStyle(color: Colors.white54, fontSize: 12),
               textAlign: TextAlign.center
         ),      
