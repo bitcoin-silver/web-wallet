@@ -118,7 +118,7 @@ flutter build web --release --base-href "/web-wallet/" --dart-define-from-file=d
 
 ## RPC Configuration
 
-The wallet uses an RPC proxy to communicate with BitcoinSilver nodes. By default the project expects a secure proxy endpoint such as `https://btcs-vps13.duckdns.org/btcs-rpc` (or your own proxy).
+The wallet uses an RPC proxy to communicate with BitcoinSilver nodes. By default the project expects a secure proxy endpoint such as `https://bitcoinsilver.eu/btcs-rpc` (or your own proxy).
 
 The proxy must:
 

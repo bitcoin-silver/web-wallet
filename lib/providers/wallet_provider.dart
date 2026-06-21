@@ -17,7 +17,7 @@ class WalletProvider with ChangeNotifier {
   int _txCount = 0;
 
   // RPC Config
-  String _rpcUrl = 'https://btcs-vps13.duckdns.org/btcs-rpc';
+  String _rpcUrl = 'https://bitcoinsilver.eu/btcs-rpc';
   String _rpcUser = '';
   String _rpcPassword = '';
 
