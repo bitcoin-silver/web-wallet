@@ -933,7 +933,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   }
 
   Widget _buildTxBadge(TransactionModel tx) {
-    if (tx.isPending) {
+    if (!tx.isPending) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
         decoration: BoxDecoration(
@@ -958,7 +958,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
       ),
       child: Text(
-        '${tx.confirmations} Confirmations',
+        'Confirmed',
         style: const TextStyle(
             fontSize: 9, color: Colors.greenAccent, fontWeight: FontWeight.bold),
       ),

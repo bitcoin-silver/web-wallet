@@ -355,17 +355,16 @@ Future<void> refreshBalance() async {
     _isLoadingUtxos = false;
   }
 
-  Future<bool?> validateAddress(String address) async {
+  Future<bool> validateAddress(String address) async {
     if (address.isEmpty) return false;
     try {
       final result = await _walletService.rpcRequest(
         _rpcUrl, _rpcUser, _rpcPassword, 'validateaddress', [address]);
-      if (result != null && result['result'] != null) {
-        return result['result']['isvalid'] == true; // true or false from node
-      }
-      return null; // RPC responded but result was unexpected
+      return result != null &&
+          result['result'] != null &&
+          result['result']['isvalid'] == true;
     } catch (_) {
-      return null; // RPC failed — unknown, not invalid
+      return false;
     }
   }
 
