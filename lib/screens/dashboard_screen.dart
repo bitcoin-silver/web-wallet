@@ -97,7 +97,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   bool _priceLoading = true;
   bool _advancedSend = false;
   final PriceService _priceService = PriceService();
-  bool? _addressValid;       // null = unchecked, true = valid, false = invalid
+  bool? _addressValid; // null=unchecked/unknown, true=valid, false=invalid
   bool _isValidatingAddress = false;
   Timer? _addressDebounce;
 
@@ -933,7 +933,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   }
 
   Widget _buildTxBadge(TransactionModel tx) {
-    if (!tx.isPending) {
+    if (tx.isPending) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
         decoration: BoxDecoration(
@@ -958,7 +958,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
       ),
       child: Text(
-        'Confirmed',
+        '${tx.confirmations} Confirmations',
         style: const TextStyle(
             fontSize: 9, color: Colors.greenAccent, fontWeight: FontWeight.bold),
       ),
@@ -1196,26 +1196,31 @@ int _migrationSeedWords = 12;
               const SizedBox(height: 40),
 
               ElevatedButton(
-                onPressed: provider.isLoading || amountErr != null || _addressValid == false || _isValidatingAddress
-                    ? null
-                    : () async {
-                        final amount = double.tryParse(_amountController.text);
-                        if (amount != null) {
-                          final success = await provider.sendTransaction(
-                            _toController.text.trim(),
-                            amount,
-                          );
-                          if (success) {
-                            _toController.clear();
-                            _amountController.clear();
-                            setState(() {
-                              _addressValid = null;
-                              if (_advancedSend) _advancedSend = false;
-                            });
-                            provider.resetCoinControl();
+                  onPressed: provider.isLoading 
+                      || amountErr != null 
+                      || _isValidatingAddress
+                      || _toController.text.trim().isEmpty    
+                      || _addressValid == false                
+                      ? null
+                      : () async {
+                          provider.clearMessage();            
+                          final amount = double.tryParse(_amountController.text);
+                          if (amount != null) {
+                            final success = await provider.sendTransaction(
+                              _toController.text.trim(),
+                              amount,
+                            );
+                            if (success) {
+                              _toController.clear();
+                              _amountController.clear();
+                              setState(() {
+                                _addressValid = null;
+                                if (_advancedSend) _advancedSend = false;
+                              });
+                              provider.resetCoinControl();
+                            }
                           }
-                        }
-                      },
+                        },
                 style: ElevatedButton.styleFrom(
                     minimumSize: const Size(double.infinity, 64)),
                 child: provider.isLoading
