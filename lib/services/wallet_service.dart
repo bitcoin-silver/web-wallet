@@ -348,7 +348,13 @@ class WalletService {
   ) async {
     // Get UTXOs (Filter out pending marker)
     final allUtxos = await getUtxos(rpcUrl, rpcUser, rpcPassword, fromAddress);
-    final utxos = allUtxos.where((u) => u['txid'] != 'pending_marker' && (u['confirmations'] as int) > 0).toList();
+    // Use pre-selected if provided, otherwise auto-select as before
+    final utxos = (preSelectedUtxos != null && preSelectedUtxos.isNotEmpty)
+        ? preSelectedUtxos
+        : allUtxos.where((u) =>
+            u['txid'] != 'pending_marker' &&
+            (u['confirmations'] as int) > 0
+          ).toList();
 
     if (utxos.isEmpty) {
       final hasPending = allUtxos.any((u) =>
