@@ -3,7 +3,7 @@
 ## Introduction
 
 
-A modern, secure, and modular web wallet for BitcoinSilver (BTCS). This release provides improved architecture, seed phrase support, and safer RPC communication for web deployment.
+A modern, secure, non-custodial, client-side signing wallet for the SHA256 Coin network. This version introduces significant architectural improvements, seed phrase support, and a built-in migration tool.
 
 <p align="center">
   <img src="assets/logo.png" alt="BitcoinSilver Web-Wallet" width="600">
@@ -19,30 +19,43 @@ A modern, secure, and modular web wallet for BitcoinSilver (BTCS). This release 
   <a href="https://explorer.bitcoinsilver.top">Explorer</a>
 </p>
 
-## Major Updates in v2.5
+## 🚀 What's New in v2.5
 
 ### 🪙 Coin Control (Advanced Send)
 Full control over which UTXOs are used in a transaction:
-- **Advanced tab** in the Send view lets you hand-pick inputs from your confirmed UTXO set.
-- **Scrollable UTXO table** with index, truncated TXID:vout, amount, and real confirmation count.
-- **Live selection summary**: selected input count and total update instantly as you check/uncheck.
-- **Auto-fill amount**: selecting inputs pre-fills the amount field with the exact total.
-- **All / None** shortcuts for quick selection.
-- Pagination-free — fixed-height scrollable list handles wallets of any size cleanly.
+- **Advanced UI**: Manually hand-pick inputs from your confirmed UTXO set.
+- **Live Summary**: Instant updates on total selected inputs and transaction size.
+- **Management**: Scrollable UTXO list with index, TXID, amount, and confirmation status.
+- **Flexibility**: Built-in 'All / None' selectors for rapid management.
 
 ### 💸 Fee Estimation
-- **Simple mode**: estimated fee displayed based on a typical 1-in 2-out transaction (226 bytes).
-- **Advanced mode**: exact fee estimate recalculated live based on the actual number of selected inputs.
-- **Net send** display shows exactly how much the recipient receives after fees.
-- Fee rate fetched live from the node via `estimatesmartfee`.
+- **Dynamic Calculation**: Real-time vByte estimation based on input/output count.
+- **Smart Rates**: Integrated `estimatesmartfee` integration for market-accurate fees.
+- **Net Send Display**: Always know exactly what the recipient receives after miner fees.
 
-### ✅ Address & Amount Validation
-- **Live RPC address validation**: recipient address is verified against the node with a 700ms debounce — green tick on valid, red cross on invalid.
-- **Amount guards**: catches negative values, zero, dust threshold violations (< 0.00000546 BTCS), and amounts exceeding selected inputs or available balance.
-- **Send button disabled** while validating or when any input error is present — no bad transactions can be fired.
+### ✅ Validation & Guardrails
+- **Real-time RPC Validation**: Address format verified via node-side `validateaddress` (700ms debounce).
+- **Hard Guards**: Prevents dust inputs (< 0.00000546), negative amounts, and insufficient balance errors before the 'Send' button is ever active.
 
-### 📈 Real Confirmation Counts
-- UTXO confirmations now calculated accurately from block height (`getblockcount` − UTXO height + 1) instead of being hardcoded.
+### 📈 Precision Data
+- **Confirmation Accuracy**: Real-time confirmation tracking calculated via `getblockcount` - `utxo.height`.
+- **Address-Agnostic Routing**: Native support for Native SegWit (bs...), Legacy P2PKH (b/B...), and Legacy P2SH (8/3...) address types with automatic script generation.
+
+---
+
+## 🛡️ Security Architecture
+This version marks a major shift in our security model:
+- **Client-Side Signing**: Transactions are signed locally in the browser. Private keys (WIF) and seed phrases never touch the network/server.
+- **Zero-Trust Broadcast**: The RPC node only receives a signed transaction hex; it never sees your private keys or your balance information.
+- **Web Runtime Optimized**: Logic refactored to support strict `dart2js` environment constraints (e.g., custom 64-bit integer handling).
+
+---
+
+## 🏗️ Technical Stack
+- **Derivation**: BIP39 Mnemonic Seed / BIP44 Standard Paths.
+- **Cryptography**: PointyCastle (RIPEMD160/SHA256).
+- **Frontend**: Flutter Web (Optimized for performance).
+- **Communication**: JSON-RPC over HTTPS.
 
 ## Major Updates in v2.4
 
