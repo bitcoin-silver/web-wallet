@@ -38,9 +38,9 @@ class BTCSTxOutput {
 class BTCSSigner {
     static const int SIGHASH_ALL = 1;
     static const String addressPrefix = 'bs'; // Bech32 HRP
-    static const int networkPrefix = 0x80; // Example: 'B' or 'b' often maps to 0x80 for WIF
-    static const int P2PKH_PREFIX = 0x00; // Example: 'B' or 'b' often maps to 0x00
-    static const int P2SH_PREFIX = 0x05;  // Example: '8' or '3' often maps to 0x05
+    static const int networkPrefix = 0x80; 
+    static const int P2PKH_PREFIX = 0x1A; // 26 in decimal
+    static const int P2SH_PREFIX = 0x05;  // 5 in decimal
   
     static final BaseXCodec base58 = BaseXCodec('123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz');
 
