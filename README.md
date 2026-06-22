@@ -3,7 +3,7 @@
 ## Introduction
 
 
-A modern, secure, non-custodial, client-side signing wallet for the SHA256 Coin network. This version introduces significant architectural improvements, seed phrase support, and a built-in migration tool.
+A modern, secure, non-custodial, client-side signing wallet for the Bitcoin Silver network. This version introduces significant architectural improvements, seed phrase support, and a built-in migration tool.
 
 <p align="center">
   <img src="assets/logo.png" alt="BitcoinSilver Web-Wallet" width="600">
