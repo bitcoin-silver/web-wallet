@@ -26,10 +26,13 @@ class WalletProvider with ChangeNotifier {
   String get message => _message;
   bool get isLoaded => _wallet != null;
 
+  // Expose walletService to let the setup UI generate local keys safely
+  WalletService get walletService => _walletService;
   List<TransactionModel> get transactions => _transactions;
   List<TransactionModel> get visibleTransactions => _transactions;
   bool get hasMoreTransactions => _transactions.length < _txCount;
   bool get isLoadingTxs => _isLoadingTxs;
+  double _feeRate = 0.00001;
   // Coin control state
   List<Map<String, dynamic>> _availableUtxos = [];
   Set<String> _selectedUtxoKeys = {}; // "txid:vout"
@@ -42,24 +45,23 @@ class WalletProvider with ChangeNotifier {
   bool get isLoadingUtxos => _isLoadingUtxos;
   int get utxoPage => _utxoPage;
   int get utxoPageCount => (_availableUtxos.isEmpty) ? 1 : (_availableUtxos.length / _utxosPerPage).ceil();
+  int get selectedUtxoCount => _selectedUtxoKeys.length;
+  // Typical 1-in 2-out tx = 10 + 148 + 68 = 226 bytes
+  double get estimatedSimpleFee => double.parse((_feeRate * 226 / 1000).toStringAsFixed(8));
+
+  double get selectedUtxoTotal => _availableUtxos
+      .where((u) => _selectedUtxoKeys.contains('${u['txid']}:${u['vout']}'))
+      .fold(0.0, (sum, u) => sum + (u['amount'] as num).toDouble());
+
+  List<Map<String, dynamic>> get selectedUtxoList => _availableUtxos
+      .where((u) => _selectedUtxoKeys.contains('${u['txid']}:${u['vout']}'))
+      .toList();
 
   List<Map<String, dynamic>> get currentPageUtxos {
     final start = _utxoPage * _utxosPerPage;
     final end = (start + _utxosPerPage).clamp(0, _availableUtxos.length);
     return _availableUtxos.sublist(start, end);
   }
-
-  double get selectedUtxoTotal => _availableUtxos
-      .where((u) => _selectedUtxoKeys.contains('${u['txid']}:${u['vout']}'))
-      .fold(0.0, (sum, u) => sum + (u['amount'] as num).toDouble());
-
-  int get selectedUtxoCount => _selectedUtxoKeys.length;
-
-  List<Map<String, dynamic>> get selectedUtxoList => _availableUtxos
-      .where((u) => _selectedUtxoKeys.contains('${u['txid']}:${u['vout']}'))
-      .toList();
-
-  double _feeRate = 0.00001;
 
   double get estimatedFee {
     if (_selectedUtxoKeys.isEmpty) return 0.0;
@@ -73,11 +75,7 @@ class WalletProvider with ChangeNotifier {
     return net > 0 ? net : 0.0;
   }
 
-// Typical 1-in 2-out tx = 10 + 148 + 68 = 226 bytes
-  double get estimatedSimpleFee =>
-    double.parse((_feeRate * 226 / 1000).toStringAsFixed(8));
-
-    Future<void> fetchFeeRate() async {
+  Future<void> fetchFeeRate() async {
     try {
       final feeResult = await _walletService.rpcRequest(
         _rpcUrl, _rpcUser, _rpcPassword, 'estimatesmartfee', [6]);
@@ -132,9 +130,6 @@ class WalletProvider with ChangeNotifier {
     }
   }
  
-  // Expose walletService to let the setup UI generate local keys safely
-  WalletService get walletService => _walletService;
-
   WalletProvider() {
     _loadRpcConfig();
   }
@@ -184,38 +179,39 @@ class WalletProvider with ChangeNotifier {
     };
   }
 
-Future<void> refreshBalance() async {
-    if (_wallet == null) return;
+  Future<void> refreshBalance() async {
 
-    try {
-      // If rpcRequest throws an exception due to a 404/disconnect, it jumps straight to catch
-      final utxos = await _walletService.getUtxos(
-          _rpcUrl, _rpcUser, _rpcPassword, _wallet!.address);
-          
-      final balance = _walletService.calculateBalance(utxos);
-      final unconfirmed = _walletService.calculateUnconfirmedBalance(utxos);
-      final hasMempoolActivity = utxos.any((u) => u['confirmations'] == 0);
+      if (_wallet == null) return;
 
-      if (!hasMempoolActivity) {
-        _localPendingTxs.clear();
+      try {
+        // If rpcRequest throws an exception due to a 404/disconnect, it jumps straight to catch
+        final utxos = await _walletService.getUtxos(
+            _rpcUrl, _rpcUser, _rpcPassword, _wallet!.address);
+            
+        final balance = _walletService.calculateBalance(utxos);
+        final unconfirmed = _walletService.calculateUnconfirmedBalance(utxos);
+        final hasMempoolActivity = utxos.any((u) => u['confirmations'] == 0);
+
+        if (!hasMempoolActivity) {
+          _localPendingTxs.clear();
+        }
+
+        _wallet = _wallet!.copyWith(
+          balance: balance,
+          unconfirmedBalance: unconfirmed,
+          isPending: hasMempoolActivity || _localPendingTxs.isNotEmpty,
+        );
+        
+        // Clear any previous connection errors if it successfully fetches
+        if (_message.contains('Connection lost')) _message = '';
+        notifyListeners();
+        // Refresh transaction history in background
+        fetchTransactions();
+      } catch (_) {
+        // 💡 Update message state so the dashboard can show a 'Connection Lost / Working Offline' banner
+        _message = '⚠️ Connection lost. Displaying cached balances.';
+        notifyListeners();
       }
-
-      _wallet = _wallet!.copyWith(
-        balance: balance,
-        unconfirmedBalance: unconfirmed,
-        isPending: hasMempoolActivity || _localPendingTxs.isNotEmpty,
-      );
-      
-      // Clear any previous connection errors if it successfully fetches
-      if (_message.contains('Connection lost')) _message = '';
-      notifyListeners();
-      // Refresh transaction history in background
-      fetchTransactions();
-    } catch (_) {
-      // 💡 Update message state so the dashboard can show a 'Connection Lost / Working Offline' banner
-      _message = '⚠️ Connection lost. Displaying cached balances.';
-      notifyListeners();
-    }
   }
 
   /// Fetch first page of transactions for the current wallet address.

@@ -33,6 +33,7 @@ double _parseDelta(Map<String, dynamic>? delta) {
 }
 
 class PriceService {
+  
   Future<PriceData?> getBTCSPrice({String currency = 'USD'}) async {
     try {
       final response = await http.post(

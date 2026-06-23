@@ -5,146 +5,144 @@ import 'package:bech32/bech32.dart';
 import 'package:base_x/base_x.dart';
 import 'package:bip32/bip32.dart' as bip32;
 
-class BTCSTxInput {
-  final String txid;
-  final int vout;
-  final Uint8List scriptPubKey;
-  final int satoshis;
-  Uint8List? scriptSig;
-  List<Uint8List>? witness; 
-  int sequence;
+  class BTCSTxInput {
+    final String txid;
+    final int vout;
+    final Uint8List scriptPubKey;
+    final int satoshis;
+    Uint8List? scriptSig;
+    List<Uint8List>? witness; 
+    int sequence;
 
-  BTCSTxInput({
-    required this.txid,
-    required this.vout,
-    required this.scriptPubKey,
-    required this.satoshis,
-    this.scriptSig,
-    this.witness,
-    this.sequence = 0xffffffff,
-  });
-}
-
-class BTCSTxOutput {
-  final Uint8List scriptPubKey;
-  final int satoshis;
-
-  BTCSTxOutput({
-    required this.scriptPubKey,
-    required this.satoshis,
-  });
-}
-
-class BTCSSigner {
-    static const int SIGHASH_ALL = 1;
-    static const String addressPrefix = 'bs'; // Bech32 HRP
-    static const int networkPrefix = 0x80; 
-    static const int P2PKH_PREFIX = 0x1A; // 26 in decimal
-    static const int P2SH_PREFIX = 0x05;  // 5 in decimal
-  
-    static final BaseXCodec base58 = BaseXCodec('123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz');
-
-    static String signTransaction({
-    required List<BTCSTxInput> inputs,
-    required List<BTCSTxOutput> outputs,
-    required String wif,
-  }) {
-    // 1. Decode WIF directly to raw bytes
-    final Uint8List privKeyBytes = _decodeWifToBytes(wif);
-    
-    // 2. Derive public key safely using working BIP32 web bindings
-    final node = bip32.BIP32.fromPrivateKey(privKeyBytes, Uint8List(32));
-    final Uint8List pubKey = node.publicKey;
-
-    // 3. Precompute SegWit fragments
-    final Uint8List hashPrevouts = _getHashPrevouts(inputs);
-    final Uint8List hashSequence = _getHashSequence(inputs);
-    final Uint8List hashOutputs = _getHashOutputs(outputs);
-
-    // 4. Sign each input
-    for (int i = 0; i < inputs.length; i++) {
-      final Uint8List preimage = _buildSegWitPreimage(
-        inputs: inputs,
-        outputs: outputs,
-        index: i,
-        hashPrevouts: hashPrevouts,
-        hashSequence: hashSequence,
-        hashOutputs: hashOutputs,
-        hashType: SIGHASH_ALL,
-      );
-      
-      final Uint8List txHash = _doubleSha256(preimage);
-      
-      // Sign using BIP32's optimized, web-safe internal engine
-      final Uint8List rawSig = node.sign(txHash);
-      final Uint8List derSig = _encodeDer(rawSig);
-      
-      final Uint8List sigWithHashType = Uint8List(derSig.length + 1);
-      sigWithHashType.setRange(0, derSig.length, derSig);
-      sigWithHashType[derSig.length] = SIGHASH_ALL;
-
-      inputs[i].scriptSig = Uint8List(0); 
-      inputs[i].witness = [sigWithHashType, pubKey];
-    }
-
-    return HEX.encode(_serializeSegWitTransaction(inputs, outputs));
+    BTCSTxInput({
+      required this.txid,
+      required this.vout,
+      required this.scriptPubKey,
+      required this.satoshis,
+      this.scriptSig,
+      this.witness,
+      this.sequence = 0xffffffff,
+    });
   }
+
+  class BTCSTxOutput {
+    final Uint8List scriptPubKey;
+    final int satoshis;
+
+    BTCSTxOutput({
+      required this.scriptPubKey,
+      required this.satoshis,
+    });
+  }
+
+  class BTCSSigner {
+      static const int SIGHASH_ALL = 1;
+      static const String addressPrefix = 'bs'; // Bech32 HRP
+      static const int networkPrefix = 0x80; 
+      static const int P2PKH_PREFIX = 0x1A; // 26 in decimal
+      static const int P2SH_PREFIX = 0x05;  // 5 in decimal
+    
+      static final BaseXCodec base58 = BaseXCodec('123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz');
+
+      static String signTransaction({
+      required List<BTCSTxInput> inputs,
+      required List<BTCSTxOutput> outputs,
+      required String wif,
+    }) {
+      // 1. Decode WIF directly to raw bytes
+      final Uint8List privKeyBytes = _decodeWifToBytes(wif);
+      
+      // 2. Derive public key safely using working BIP32 web bindings
+      final node = bip32.BIP32.fromPrivateKey(privKeyBytes, Uint8List(32));
+      final Uint8List pubKey = node.publicKey;
+
+      // 3. Precompute SegWit fragments
+      final Uint8List hashPrevouts = _getHashPrevouts(inputs);
+      final Uint8List hashSequence = _getHashSequence(inputs);
+      final Uint8List hashOutputs = _getHashOutputs(outputs);
+
+      // 4. Sign each input
+      for (int i = 0; i < inputs.length; i++) {
+        final Uint8List preimage = _buildSegWitPreimage(
+          inputs: inputs,
+          outputs: outputs,
+          index: i,
+          hashPrevouts: hashPrevouts,
+          hashSequence: hashSequence,
+          hashOutputs: hashOutputs,
+          hashType: SIGHASH_ALL,
+        );
+        
+        final Uint8List txHash = _doubleSha256(preimage);
+        
+        // Sign using BIP32's optimized, web-safe internal engine
+        final Uint8List rawSig = node.sign(txHash);
+        final Uint8List derSig = _encodeDer(rawSig);
+        
+        final Uint8List sigWithHashType = Uint8List(derSig.length + 1);
+        sigWithHashType.setRange(0, derSig.length, derSig);
+        sigWithHashType[derSig.length] = SIGHASH_ALL;
+
+        inputs[i].scriptSig = Uint8List(0); 
+        inputs[i].witness = [sigWithHashType, pubKey];
+      }
+      return HEX.encode(_serializeSegWitTransaction(inputs, outputs));
+    }
 
     static Uint8List scriptFromAddress(String address) {
-  // 1. Handle Native SegWit (Bech32 - 'bs')
-  if (address.toLowerCase().startsWith(addressPrefix)) {
+    // 1. Handle Native SegWit (Bech32 - 'bs')
+      if (address.toLowerCase().startsWith(addressPrefix)) {
+        try {
+          const bech32Codec = Bech32Codec();
+          final decoded = bech32Codec.decode(address, 1000);
+          
+          final int witnessVersion = decoded.data[0];
+          final Uint8List witnessProgram5Bit = Uint8List.fromList(decoded.data.sublist(1));
+          final Uint8List witnessProgram = _convertBits(witnessProgram5Bit, 5, 8, false);
+
+          final builder = _BytesBuilder();
+          builder.writeByte(witnessVersion == 0 ? 0x00 : 0x50 + witnessVersion); 
+          builder.writeByte(witnessProgram.length);
+          builder.writeBytes(witnessProgram);
+          return builder.toBytes();
+        } catch (e) {
+          throw Exception('Malformed native SegWit target: $e');
+      }
+    }
+
+    // 2. Handle Legacy Base58 ('B', 'b', '8', '3' prefixes)
     try {
-      const bech32Codec = Bech32Codec();
-      final decoded = bech32Codec.decode(address, 1000);
+      final Uint8List decodedWithChecksum = Uint8List.fromList(base58.decode(address));
+      final Uint8List payload = decodedWithChecksum.sublist(0, decodedWithChecksum.length - 4);
       
-      final int witnessVersion = decoded.data[0];
-      final Uint8List witnessProgram5Bit = Uint8List.fromList(decoded.data.sublist(1));
-      final Uint8List witnessProgram = _convertBits(witnessProgram5Bit, 5, 8, false);
+      final int versionByte = payload[0];
+      final Uint8List hashPayload = payload.sublist(1);
 
       final builder = _BytesBuilder();
-      builder.writeByte(witnessVersion == 0 ? 0x00 : 0x50 + witnessVersion); 
-      builder.writeByte(witnessProgram.length);
-      builder.writeBytes(witnessProgram);
+
+      // Map based on BTCS prefixes
+      if (versionByte == P2PKH_PREFIX) {
+        // P2PKH: OP_DUP OP_HASH160 <20-byte-hash> OP_EQUALVERIFY OP_CHECKSIG
+        builder.writeByte(0x76); builder.writeByte(0xa9); 
+        builder.writeByte(hashPayload.length);
+        builder.writeBytes(hashPayload);
+        builder.writeByte(0x88); builder.writeByte(0xac); 
+      } 
+      else if (versionByte == P2SH_PREFIX) {
+        // P2SH: OP_HASH160 <20-byte-hash> OP_EQUAL
+        builder.writeByte(0xa9); 
+        builder.writeByte(hashPayload.length);
+        builder.writeBytes(hashPayload);
+        builder.writeByte(0x87); 
+      } 
+      else {
+        throw Exception('Unsupported address prefix byte: $versionByte');
+      }
       return builder.toBytes();
     } catch (e) {
-      throw Exception('Malformed native SegWit target: $e');
+      throw Exception('Target address format unsupported: $address');
     }
   }
-
-  // 2. Handle Legacy Base58 ('B', 'b', '8', '3' prefixes)
-  try {
-    final Uint8List decodedWithChecksum = Uint8List.fromList(base58.decode(address));
-    final Uint8List payload = decodedWithChecksum.sublist(0, decodedWithChecksum.length - 4);
-    
-    final int versionByte = payload[0];
-    final Uint8List hashPayload = payload.sublist(1);
-
-    final builder = _BytesBuilder();
-
-    // Map based on BTCS prefixes
-    if (versionByte == P2PKH_PREFIX) {
-      // P2PKH: OP_DUP OP_HASH160 <20-byte-hash> OP_EQUALVERIFY OP_CHECKSIG
-      builder.writeByte(0x76); builder.writeByte(0xa9); 
-      builder.writeByte(hashPayload.length);
-      builder.writeBytes(hashPayload);
-      builder.writeByte(0x88); builder.writeByte(0xac); 
-    } 
-    else if (versionByte == P2SH_PREFIX) {
-      // P2SH: OP_HASH160 <20-byte-hash> OP_EQUAL
-      builder.writeByte(0xa9); 
-      builder.writeByte(hashPayload.length);
-      builder.writeBytes(hashPayload);
-      builder.writeByte(0x87); 
-    } 
-    else {
-      throw Exception('Unsupported address prefix byte: $versionByte');
-    }
-
-    return builder.toBytes();
-  } catch (e) {
-    throw Exception('Target address format unsupported: $address');
-  }
-}
 
   static Uint8List _buildSegWitPreimage({
     required List<BTCSTxInput> inputs,
@@ -225,7 +223,6 @@ class BTCSSigner {
   }
 
   // ── Web-Safe Byte Parsers ──────────────────────────────────────────────────
-
   static Uint8List _decodeWifToBytes(String wif) {
     final Uint8List bytes = Uint8List.fromList(base58.decode(wif));
     final keyWithChecksum = bytes.sublist(0, bytes.length - 4);
@@ -331,45 +328,46 @@ class BTCSSigner {
   }
 }
 
-class _BytesBuilder {
-  final List<int> _bytes = [];
-  void writeByte(int value) => _bytes.add(value & 0xFF);
-  void writeBytes(Uint8List bytes) => _bytes.addAll(bytes);
-
-  void writeUint32(int value) {
-    final data = ByteData(4)..setUint32(0, value, Endian.little);
-    _bytes.addAll(data.buffer.asUint8List());
-  }
-
-void writeUint64(int value) {
-    // Web-Safe 64-bit serialization (Bypasses dart2js setUint64 crash)
-    // We mathematically split the value into two 32-bit chunks.
-    final int lo = value.remainder(0x100000000).toInt();
-    final int hi = (value ~/ 0x100000000).toInt();
-
-    final data = ByteData(8);
-    // Write the lower 32 bits, then the upper 32 bits (Little Endian format)
-    data.setUint32(0, lo, Endian.little);
-    data.setUint32(4, hi, Endian.little);
+  class _BytesBuilder {
     
-    _bytes.addAll(data.buffer.asUint8List());
-  }
+    final List<int> _bytes = [];
+    void writeByte(int value) => _bytes.add(value & 0xFF);
+    void writeBytes(Uint8List bytes) => _bytes.addAll(bytes);
 
-  void writeVarInt(int value) {
-    if (value < 0xfd) {
-      writeByte(value);
-    } else if (value <= 0xffff) {
-      writeByte(0xfd);
-      final data = ByteData(2)..setUint16(0, value, Endian.little);
+    void writeUint32(int value) {
+      final data = ByteData(4)..setUint32(0, value, Endian.little);
       _bytes.addAll(data.buffer.asUint8List());
-    } else if (value <= 0xffffffff) {
-      writeByte(0xfe);
-      writeUint32(value);
-    } else {
-      writeByte(0xff);
-      writeUint64(value);
     }
-  }
 
-  Uint8List toBytes() => Uint8List.fromList(_bytes);
-}
+  void writeUint64(int value) {
+      // Web-Safe 64-bit serialization (Bypasses dart2js setUint64 crash)
+      // We mathematically split the value into two 32-bit chunks.
+      final int lo = value.remainder(0x100000000).toInt();
+      final int hi = (value ~/ 0x100000000).toInt();
+
+      final data = ByteData(8);
+      // Write the lower 32 bits, then the upper 32 bits (Little Endian format)
+      data.setUint32(0, lo, Endian.little);
+      data.setUint32(4, hi, Endian.little);
+      
+      _bytes.addAll(data.buffer.asUint8List());
+    }
+
+    void writeVarInt(int value) {
+      if (value < 0xfd) {
+        writeByte(value);
+      } else if (value <= 0xffff) {
+        writeByte(0xfd);
+        final data = ByteData(2)..setUint16(0, value, Endian.little);
+        _bytes.addAll(data.buffer.asUint8List());
+      } else if (value <= 0xffffffff) {
+        writeByte(0xfe);
+        writeUint32(value);
+      } else {
+        writeByte(0xff);
+        writeUint64(value);
+      }
+    }
+
+    Uint8List toBytes() => Uint8List.fromList(_bytes);
+  }

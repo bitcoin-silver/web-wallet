@@ -6,7 +6,6 @@ import '../theme/app_theme.dart';
 
 class SetupScreen extends StatefulWidget {
   final bool useSeed;
-
   const SetupScreen({super.key, required this.useSeed});
 
   @override

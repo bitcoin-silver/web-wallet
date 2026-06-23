@@ -177,8 +177,6 @@ class FooterWidget extends StatelessWidget {
     );
   }
 
-
-
   Widget _buildFooterColumn({
     required String title,
     required dynamic icon,
