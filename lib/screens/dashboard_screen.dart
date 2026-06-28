@@ -1104,6 +1104,9 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               ),
               const SizedBox(height: 32),
 
+              _buildFeeStateBanner(provider),
+              const SizedBox(height: 16),
+
               // Address field with live RPC validation
               TextField(
                 controller: _toController,
@@ -1169,6 +1172,15 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                   final fee = _advancedSend && provider.selectedUtxoCount > 0
                       ? provider.estimatedFee
                       : provider.estimatedSimpleFee;
+                  if (provider.isFetchingFeeRate) {
+                    return const Padding(
+                      padding: EdgeInsets.only(top: 6, left: 4),
+                      child: Text(
+                        'Fetching fee estimate...',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    );
+                  }
                   final label = _advancedSend && provider.selectedUtxoCount > 0
                       ? 'Est. fee'
                       : 'Est. fee (typical tx)';
@@ -1176,7 +1188,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                   return Padding(
                     padding: const EdgeInsets.only(top: 6, left: 4),
                     child: Text(
-                      '$label: ${fee.toStringAsFixed(8)} BTCS',
+                      '${provider.usingManualFeeRate ? 'Manual ' : ''}$label: ${fee.toStringAsFixed(8)} BTCS',
                       style: const TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                   );
@@ -1204,11 +1216,34 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                           provider.clearMessage();            
                           final amount = double.tryParse(_amountController.text);
                           if (amount != null) {
-                            final success = await provider.sendTransaction(
+                            final result = await provider.sendTransaction(
                               _toController.text.trim(),
                               amount,
                             );
-                            if (success) {
+
+                            if (result['success'] != true && result['requiresManualFee'] == true && mounted) {
+                              final manualFeeRate = await _showManualFeeDialog(context);
+                              if (manualFeeRate != null) {
+                                provider.setManualFeeRate(manualFeeRate);
+                                final retryResult = await provider.sendTransaction(
+                                  _toController.text.trim(),
+                                  amount,
+                                  manualFeeRateCoinPerKb: manualFeeRate,
+                                );
+                                if (retryResult['success'] == true) {
+                                  _toController.clear();
+                                  _amountController.clear();
+                                  setState(() {
+                                    _addressValid = null;
+                                    if (_advancedSend) _advancedSend = false;
+                                  });
+                                  provider.resetCoinControl();
+                                }
+                              }
+                              return;
+                            }
+
+                            if (result['success'] == true) {
                               _toController.clear();
                               _amountController.clear();
                               setState(() {
@@ -1254,6 +1289,160 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     if (!_advancedSend) return;
     final total = provider.selectedUtxoTotal;
     _amountController.text = total > 0 ? total.toStringAsFixed(8) : '';
+  }
+
+  Widget _buildFeeStateBanner(WalletProvider provider) {
+    final bool warning = !provider.feeRateReady;
+    final Color color = warning ? Colors.orange : Colors.green;
+    final IconData icon = warning ? Icons.warning_amber_rounded : Icons.check_circle_outline_rounded;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.35)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              provider.feeRateStatusMessage,
+              style: TextStyle(fontSize: 12, color: warning ? Colors.orange.shade200 : Colors.green.shade200),
+            ),
+          ),
+          if (warning)
+            TextButton(
+              onPressed: provider.isFetchingFeeRate ? null : () => provider.fetchFeeRate(),
+              child: const Text('Retry'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<double?> _showManualFeeDialog(BuildContext context) async {
+    final controller = TextEditingController();
+    String? error;
+    bool satPerByte = true;
+
+    final result = await showDialog<double>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Manual Fee Required'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Automatic fee estimation is unavailable. Enter a manual fee rate to continue.',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  const SizedBox(height: 12),
+                  ToggleButtons(
+                    isSelected: [satPerByte, !satPerByte],
+                    onPressed: (index) {
+                      setDialogState(() {
+                        satPerByte = index == 0;
+                        error = null;
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    children: const [
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 12),
+                        child: Text('sat/byte'),
+                      ),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 12),
+                        child: Text('BTCS/kB'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Quick network presets (sat/byte):',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      OutlinedButton(
+                        onPressed: () {
+                          setDialogState(() {
+                            satPerByte = true;
+                            controller.text = '0.10';
+                            error = null;
+                          });
+                        },
+                        child: const Text('High (0.10)'),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: () {
+                          setDialogState(() {
+                            satPerByte = true;
+                            controller.text = '0.09';
+                            error = null;
+                          });
+                        },
+                        child: const Text('Low (0.09)'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: controller,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(
+                      labelText: satPerByte ? 'Fee rate (sat/byte)' : 'Fee rate (BTCS/kB)',
+                      hintText: satPerByte ? 'e.g. 2.0' : 'e.g. 0.00002000',
+                      errorText: error,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final raw = double.tryParse(controller.text.trim());
+                    if (raw == null || raw <= 0) {
+                      setDialogState(() {
+                        error = 'Enter a valid fee rate greater than zero.';
+                      });
+                      return;
+                    }
+
+                    final feeRateCoinPerKb = satPerByte ? (raw * 0.00001) : raw;
+                    if (feeRateCoinPerKb <= 0) {
+                      setDialogState(() {
+                        error = 'Converted fee rate is invalid.';
+                      });
+                      return;
+                    }
+
+                    Navigator.pop(dialogContext, feeRateCoinPerKb);
+                  },
+                  child: const Text('Use Fee & Send'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    controller.dispose();
+    return result;
   }
 
   Widget _buildUtxoSelector(WalletProvider provider) {
@@ -1552,6 +1741,30 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           subtitle: Text(provider.wallet!.type == WalletType.seed ? 'Seed Phrase' : 'WIF Private Key'),
         ),
         const Divider(),
+        SwitchListTile(
+          value: provider.rememberSessionEnabled,
+          onChanged: (value) async {
+            await provider.setRememberSessionEnabled(value);
+            if (!mounted) return;
+            if (value && !provider.hasSessionEncryptionSecret) {
+              _showSessionSecurityInfo(context, missingSecret: true);
+            }
+          },
+          title: const Text('Remember Wallet On This Device'),
+          subtitle: Text(
+            provider.rememberSessionEnabled
+                ? 'Enabled: encrypted wallet session is persisted in browser local storage.'
+                : 'Disabled: you must re-enter keys/seed after logout or tab close.',
+          ),
+          secondary: const Icon(Icons.lock_outline_rounded),
+        ),
+        ListTile(
+          onTap: () => _showSessionSecurityInfo(context),
+          title: const Text('Session Persistence Security Notes'),
+          subtitle: const Text('Read risks before enabling remembered session.'),
+          trailing: const Icon(Icons.info_outline_rounded),
+        ),
+        const Divider(),
         ListTile(
           onTap: () => _showBackupDialog(context, provider),
           title: const Text('Backup Wallet'),
@@ -1663,6 +1876,50 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+        ],
+      ),
+    );
+  }
+
+  void _showSessionSecurityInfo(BuildContext context, {bool missingSecret = false}) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remembered Session Security'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (missingSecret)
+                const Text(
+                  'SESSION_ENCRYPTION_SECRET_HEX is missing in your dart defines. Add a 64-char hex key before enabling this feature.',
+                  style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold),
+                ),
+              if (missingSecret) const SizedBox(height: 12),
+              const Text('What this does:'),
+              const SizedBox(height: 6),
+              const Text('• Stores an encrypted wallet session in browser local storage.'),
+              const Text('• Allows automatic wallet restore without re-entering seed/WIF.'),
+              const SizedBox(height: 12),
+              const Text('Security risks:'),
+              const SizedBox(height: 6),
+              const Text('• Any malware or malicious browser extension on this device may still extract data while unlocked.'),
+              const Text('• Dart define secrets in a web app can be extracted from the shipped bundle; this is defense-in-depth, not absolute secrecy.'),
+              const Text('• Shared/public computers should never enable remembered sessions.'),
+              const SizedBox(height: 12),
+              const Text(
+                'Recommendation: keep this OFF for high-value wallets. Use hardware or offline storage for long-term holdings.',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
         ],
       ),
     );

@@ -2,7 +2,6 @@
 
 ## Introduction
 
-
 A modern, secure, non-custodial, client-side signing wallet for the Bitcoin Silver network. This version introduces significant architectural improvements, seed phrase support, and a built-in migration tool.
 
 <p align="center">
@@ -22,29 +21,36 @@ A modern, secure, non-custodial, client-side signing wallet for the Bitcoin Silv
 ## 🚀 What's New in v2.5
 
 ### 🪙 Coin Control (Advanced Send)
+
 Full control over which UTXOs are used in a transaction:
+
 - **Advanced UI**: Manually hand-pick inputs from your confirmed UTXO set.
 - **Live Summary**: Instant updates on total selected inputs and transaction size.
 - **Management**: Scrollable UTXO list with index, TXID, amount, and confirmation status.
 - **Flexibility**: Built-in 'All / None' selectors for rapid management.
 
 ### 💸 Fee Estimation
+
 - **Dynamic Calculation**: Real-time vByte estimation based on input/output count.
 - **Smart Rates**: Integrated `estimatesmartfee` integration for market-accurate fees.
 - **Net Send Display**: Always know exactly what the recipient receives after miner fees.
 
 ### ✅ Validation & Guardrails
+
 - **Real-time RPC Validation**: Address format verified via node-side `validateaddress` (700ms debounce).
 - **Hard Guards**: Prevents dust inputs (< 0.00000546), negative amounts, and insufficient balance errors before the 'Send' button is ever active.
 
 ### 📈 Precision Data
+
 - **Confirmation Accuracy**: Real-time confirmation tracking calculated via `getblockcount` - `utxo.height`.
 - **Address-Agnostic Routing**: Native support for Native SegWit (bs...), Legacy P2PKH (b/B...), and Legacy P2SH (8/3...) address types with automatic script generation.
 
 ---
 
 ## 🛡️ Security Architecture
+
 This version marks a major shift in our security model:
+
 - **Client-Side Signing**: Transactions are signed locally in the browser. Private keys (WIF) and seed phrases never touch the network/server.
 - **Zero-Trust Broadcast**: The RPC node only receives a signed transaction hex; it never sees your private keys or your balance information.
 - **Web Runtime Optimized**: Logic refactored to support strict `dart2js` environment constraints (e.g., custom 64-bit integer handling).
@@ -52,6 +58,7 @@ This version marks a major shift in our security model:
 ---
 
 ## 🏗️ Technical Stack
+
 - **Derivation**: BIP39 Mnemonic Seed / BIP44 Standard Paths.
 - **Cryptography**: PointyCastle (RIPEMD160/SHA256).
 - **Frontend**: Flutter Web (Optimized for performance).
@@ -60,35 +67,45 @@ This version marks a major shift in our security model:
 ## Major Updates in v2.4
 
 ### 💰 Live price update fetched directly from LiveCoinWatch
+
 - Bitcoin Silver price is aquired directly from LiveCoinWatch and updated every 5 minutes.
 - Wallet balance is converted in USD and displayed to keep user informed about price fluctuations.
 
 ### 🏗️ Modular Architecture
+
 The project has been refactored from a monolithic structure to a scalable, modular architecture using the **Provider** pattern:
+
 - **Models**: Structured data objects for Wallets and Transactions.
 - **Providers**: Centralized state management for UI reactivity.
 - **Services**: Dedicated logic for cryptography, storage, and RPC communication.
 - **Screens**: Dedicated UI layers for Welcome, Setup, Dashboard, and Network Info.
 
 ### 🌱 Seed Phrase Support (BIP39)
+
 Moving beyond raw private keys, the wallet now supports modern **BIP39 Seed Phrases**:
+
 - **Generate 12 or 24 words**: Choose your desired security level.
 - **BIP44 Derivation**: Industry-standard derivation paths for maximum compatibility.
 - **Secure Backup UI**: Dedicated interface to ensure users save their phrases correctly.
 
 ### 🔄 WIF-to-Seed Migration (Sweep)
+
 A unique tool to help legacy users upgrade to modern security:
+
 - **Automatic Sweep**: Transfer all funds from a legacy WIF key to a new Seed-derived address in one click.
 - **Smart Handling**: If the wallet is empty, it upgrades the wallet type instantly without requiring a blockchain transaction.
 - **Forced Backup**: Automatically prompts the user to secure their new keys post-migration.
 
 ### 📊 Real-time Network Info
+
 A new dashboard to monitor the BTCS network health directly within the wallet:
+
 - **Blockchain Stats**: Height, Difficulty, and Median Time.
 - **Mempool Metrics**: Pending transaction count and size.
 - **Mining Data**: Global network hashrate with automatic unit conversion (GH/s, TH/s).
 
 ### 🛡️ Enhanced Security
+
 - **In-Memory Storage**: Sensitive keys now live only in the application's RAM.
 - **Refresh Protection**: Refreshing the browser (F5) now clears the session and logs the user out, preventing "partial state" mnemonic loss.
 - **Zero Leaks**: All debug prints and sensitive logs have been removed for production.
@@ -111,13 +128,31 @@ A new dashboard to monitor the BTCS network health directly within the wallet:
 - Always verify the URL is `https://bitcoinsilver.top`.
 - For large amounts, always use a desktop or hardware wallet.
 
+## Optional Remembered Session (Encrypted Local Storage)
+
+You can optionally enable "Remember Wallet On This Device" from the Settings tab.
+
+When enabled:
+
+- Wallet session data is encrypted and stored in browser local storage.
+- The wallet can auto-restore without re-entering your seed/WIF every time.
+
+Risk notes:
+
+- If this device is compromised (malware/extensions), local encrypted data can still be attacked.
+- In web builds, dart-define secrets are extractable from shipped assets; this improves resistance but is not absolute secrecy.
+- Never enable remembered sessions on shared/public devices.
+
 ## Development
 
 Run locally:
+
 ```bash
 flutter run -d chrome --dart-define-from-file=dart_defines.json
 ```
+
 or
+
 ```bash
 flutter run -d web-server --web-port 8080 --dart-define-from-file=dart_defines.json
 ```
@@ -125,6 +160,7 @@ flutter run -d web-server --web-port 8080 --dart-define-from-file=dart_defines.j
 ## Building for Deployment
 
 Build the web app:
+
 ```bash
 flutter build web --release --base-href "/web-wallet/" --dart-define-from-file=dart_defines.json
 ```

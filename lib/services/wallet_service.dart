@@ -345,6 +345,70 @@ class WalletService {
   }
 
   // Send transaction
+  Future<Map<String, dynamic>> resolveFeeRate(
+    String rpcUrl,
+    String rpcUser,
+    String rpcPassword, {
+    double? manualFeeRateCoinPerKb,
+  }) async {
+    if (manualFeeRateCoinPerKb != null) {
+      if (manualFeeRateCoinPerKb <= 0) {
+        return {
+          'success': false,
+          'message': 'Manual fee rate must be greater than zero.',
+          'reason': 'invalid-manual-fee',
+        };
+      }
+      return {
+        'success': true,
+        'feeRate': manualFeeRateCoinPerKb,
+        'source': 'manual',
+      };
+    }
+
+    try {
+      final response = await rpcRequest(
+        rpcUrl,
+        rpcUser,
+        rpcPassword,
+        'estimatesmartfee',
+        [6],
+      );
+
+      if (response?['error'] != null) {
+        return {
+          'success': false,
+          'message': 'Node failed to estimate fee. Please enter a manual fee rate.',
+          'reason': 'rpc-error',
+        };
+      }
+
+      final dynamic rawFeeRate = response?['result']?['feerate'];
+      final num? parsed = rawFeeRate is num ? rawFeeRate : num.tryParse(rawFeeRate?.toString() ?? '');
+      final double? feeRate = parsed?.toDouble();
+
+      if (feeRate == null || feeRate <= 0) {
+        return {
+          'success': false,
+          'message': 'Node could not estimate fee (feerate unavailable or -1). Enter a manual fee rate.',
+          'reason': 'no-estimate',
+        };
+      }
+
+      return {
+        'success': true,
+        'feeRate': feeRate,
+        'source': 'estimated',
+      };
+    } catch (_) {
+      return {
+        'success': false,
+        'message': 'Fee estimation request failed. Enter a manual fee rate.',
+        'reason': 'request-failed',
+      };
+    }
+  }
+
   Future<Map<String, dynamic>> sendTransaction(
     String rpcUrl,
     String rpcUser,
@@ -353,6 +417,7 @@ class WalletService {
     String fromAddress,
     String toAddress,
     double amount, {
+    double? manualFeeRateCoinPerKb,
     List<Map<String, dynamic>>? preSelectedUtxos,
   }) async {
     // ── 1. Get UTXOs ────────────────────────────────────────────────────────
@@ -412,15 +477,25 @@ class WalletService {
     utxos.sort((a, b) => ((b['amount'] as num).toDouble())
         .compareTo((a['amount'] as num).toDouble()));
 
-    // ── 3. Fetch fee rate ───────────────────────────────────────────────────
-    double feeRate = 0.00001; // sat/vByte fallback
-    try {
-      final r = await rpcRequest(
-          rpcUrl, rpcUser, rpcPassword, 'estimatesmartfee', [6]);
-      if (r?['result']?['feerate'] != null) {
-        feeRate = (r!['result']['feerate'] as num).toDouble();
-      }
-    } catch (_) {}
+    // ── 3. Resolve fee rate (estimated or manual) ───────────────────────────
+    final feeResolution = await resolveFeeRate(
+      rpcUrl,
+      rpcUser,
+      rpcPassword,
+      manualFeeRateCoinPerKb: manualFeeRateCoinPerKb,
+    );
+
+    if (feeResolution['success'] != true) {
+      return {
+        'success': false,
+        'requiresManualFee': manualFeeRateCoinPerKb == null,
+        'feeEstimationFailed': true,
+        'message': feeResolution['message'] as String? ?? 'Unable to establish transaction fee.',
+      };
+    }
+
+    final double feeRate = (feeResolution['feeRate'] as num).toDouble();
+    final bool feeEstablished = feeRate > 0;
 
     // ── 4. UTXO selection + sizing loop ─────────────────────────────────────
     final selectedUtxos = <Map<String, dynamic>>[];
@@ -529,7 +604,8 @@ class WalletService {
       }
 
       final errMsg = sendResult?['error']?['message'] as String? ?? 'Unknown error';
-      if (errMsg.contains('insufficient fee') || errMsg.contains('rejecting replacement')) {
+      if (feeEstablished &&
+          (errMsg.contains('insufficient fee') || errMsg.contains('rejecting replacement'))) {
         return {
           'success': false,
           'message': 'You have a pending transaction. Please wait approximately 20 minutes before sending another.',

@@ -3,6 +3,7 @@ import '../models/wallet_model.dart';
 import '../services/wallet_service.dart';
 import '../models/transaction_model.dart';
 import '../services/storage_service.dart';
+import '../config.dart';
 
 class WalletProvider with ChangeNotifier {
   final WalletService _walletService = WalletService();
@@ -15,6 +16,7 @@ class WalletProvider with ChangeNotifier {
   List<TransactionModel> _transactions = [];
   bool _isLoadingTxs = false;
   int _txCount = 0;
+  bool _rememberSessionEnabled = false;
 
   // RPC Config
   String _rpcUrl = 'https://bitcoinsilver.eu/btcs-rpc';
@@ -25,6 +27,9 @@ class WalletProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   String get message => _message;
   bool get isLoaded => _wallet != null;
+  bool get rememberSessionEnabled => _rememberSessionEnabled;
+  bool get hasSessionEncryptionSecret =>
+      RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(Config.sessionEncryptionSecretHex);
 
   // Expose walletService to let the setup UI generate local keys safely
   WalletService get walletService => _walletService;
@@ -33,6 +38,10 @@ class WalletProvider with ChangeNotifier {
   bool get hasMoreTransactions => _transactions.length < _txCount;
   bool get isLoadingTxs => _isLoadingTxs;
   double _feeRate = 0.00001;
+  bool _isFetchingFeeRate = false;
+  bool _feeRateReady = false;
+  bool _usingManualFeeRate = false;
+  String _feeRateStatusMessage = 'Fee estimate not requested yet.';
   // Coin control state
   List<Map<String, dynamic>> _availableUtxos = [];
   Set<String> _selectedUtxoKeys = {}; // "txid:vout"
@@ -43,6 +52,10 @@ class WalletProvider with ChangeNotifier {
   List<Map<String, dynamic>> get availableUtxos => _availableUtxos;
   Set<String> get selectedUtxoKeys => _selectedUtxoKeys;
   bool get isLoadingUtxos => _isLoadingUtxos;
+  bool get isFetchingFeeRate => _isFetchingFeeRate;
+  bool get feeRateReady => _feeRateReady;
+  bool get usingManualFeeRate => _usingManualFeeRate;
+  String get feeRateStatusMessage => _feeRateStatusMessage;
   int get utxoPage => _utxoPage;
   int get utxoPageCount => (_availableUtxos.isEmpty) ? 1 : (_availableUtxos.length / _utxosPerPage).ceil();
   int get selectedUtxoCount => _selectedUtxoKeys.length;
@@ -76,16 +89,45 @@ class WalletProvider with ChangeNotifier {
   }
 
   Future<void> fetchFeeRate() async {
+    _isFetchingFeeRate = true;
+    _feeRateReady = false;
+    _usingManualFeeRate = false;
+    _feeRateStatusMessage = 'Fetching fee estimate from node...';
+    notifyListeners();
+
     try {
-      final feeResult = await _walletService.rpcRequest(
-        _rpcUrl, _rpcUser, _rpcPassword, 'estimatesmartfee', [6]);
-      if (feeResult != null &&
-          feeResult['result'] != null &&
-          feeResult['result']['feerate'] != null) {
-        _feeRate = (feeResult['result']['feerate'] as num).toDouble();
-        notifyListeners();
+      final feeResult = await _walletService.resolveFeeRate(
+        _rpcUrl,
+        _rpcUser,
+        _rpcPassword,
+      );
+      if (feeResult['success'] == true) {
+        _feeRate = (feeResult['feeRate'] as num).toDouble();
+        _feeRateReady = true;
+        _feeRateStatusMessage = 'Fee estimate ready from node.';
+      } else {
+        _feeRate = 0.0;
+        _feeRateReady = false;
+        _feeRateStatusMessage =
+            (feeResult['message'] as String?) ?? 'Fee estimation unavailable. Manual fee required.';
       }
-    } catch (_) {}
+    } catch (_) {
+      _feeRate = 0.0;
+      _feeRateReady = false;
+      _feeRateStatusMessage = 'Fee estimation unavailable. Enter a manual fee when sending.';
+    } finally {
+      _isFetchingFeeRate = false;
+      notifyListeners();
+    }
+  }
+
+  void setManualFeeRate(double feeRateCoinPerKb) {
+    _feeRate = feeRateCoinPerKb;
+    _feeRateReady = true;
+    _usingManualFeeRate = true;
+    _feeRateStatusMessage =
+        'Using manual fee rate (${feeRateCoinPerKb.toStringAsFixed(8)} BTCS/kB).';
+    notifyListeners();
   }
 
   Future<void> loadMoreTransactions() async {
@@ -132,6 +174,93 @@ class WalletProvider with ChangeNotifier {
  
   WalletProvider() {
     _loadRpcConfig();
+    _initializeSessionPersistence();
+  }
+
+  Future<void> _initializeSessionPersistence() async {
+    _rememberSessionEnabled = _storage.loadPersistentSessionEnabled();
+    if (_rememberSessionEnabled) {
+      await _restorePersistentSessionIfPossible();
+    }
+    notifyListeners();
+  }
+
+  Future<void> _restorePersistentSessionIfPossible() async {
+    if (!hasSessionEncryptionSecret) {
+      _rememberSessionEnabled = false;
+      _storage.savePersistentSessionEnabled(false);
+      _storage.clearPersistentSession();
+      return;
+    }
+
+    final stored =
+        _storage.loadPersistentSession(Config.sessionEncryptionSecretHex);
+    if (stored == null) return;
+
+    final type = stored['type'] as String?;
+    final value = stored['value'] as String?;
+    if (type == null || value == null || value.isEmpty) {
+      _storage.clearPersistentSession();
+      return;
+    }
+
+    bool restored = false;
+    if (type == 'seed') {
+      restored = await loadSeedWallet(
+        value,
+        persistSession: false,
+        showLoadedMessage: false,
+      );
+    } else if (type == 'wif') {
+      restored = await loadWifWallet(
+        value,
+        persistSession: false,
+        showLoadedMessage: false,
+      );
+    }
+
+    if (!restored) {
+      _storage.clearPersistentSession();
+    }
+  }
+
+  Future<void> setRememberSessionEnabled(bool enabled) async {
+    if (enabled && !hasSessionEncryptionSecret) {
+      _rememberSessionEnabled = false;
+      _storage.savePersistentSessionEnabled(false);
+      _message =
+          '❌ Remembered session requires SESSION_ENCRYPTION_SECRET_HEX (64 hex chars).';
+      notifyListeners();
+      return;
+    }
+
+    _rememberSessionEnabled = enabled;
+    _storage.savePersistentSessionEnabled(enabled);
+
+    if (!enabled) {
+      _storage.clearPersistentSession();
+      notifyListeners();
+      return;
+    }
+
+    _persistCurrentSession();
+    notifyListeners();
+  }
+
+  void _persistCurrentSession() {
+    if (!_rememberSessionEnabled || _wallet == null || !hasSessionEncryptionSecret) return;
+
+    final payload = {
+      'type': _wallet!.type == WalletType.seed && (_wallet!.mnemonic?.isNotEmpty ?? false)
+          ? 'seed'
+          : 'wif',
+      'value': _wallet!.type == WalletType.seed && (_wallet!.mnemonic?.isNotEmpty ?? false)
+          ? _wallet!.mnemonic
+          : _wallet!.privateKey,
+      'savedAt': DateTime.now().toIso8601String(),
+    };
+
+    _storage.savePersistentSession(payload, Config.sessionEncryptionSecretHex);
   }
 
   void _loadRpcConfig() {
@@ -251,8 +380,17 @@ class WalletProvider with ChangeNotifier {
     }
   }
 
-  Future<bool> sendTransaction(String toAddress, double amount) async {
-    if (_wallet == null) return false;
+  Future<Map<String, dynamic>> sendTransaction(
+    String toAddress,
+    double amount, {
+    double? manualFeeRateCoinPerKb,
+  }) async {
+    if (_wallet == null) {
+      return {
+        'success': false,
+        'message': 'Wallet not loaded.',
+      };
+    }
 
     _isLoading = true;
     _message = '⏳ Sending transaction...';
@@ -266,6 +404,7 @@ class WalletProvider with ChangeNotifier {
       _wallet!.address,
       toAddress,
       amount,
+      manualFeeRateCoinPerKb: manualFeeRateCoinPerKb,
       preSelectedUtxos: _selectedUtxoKeys.isNotEmpty ? selectedUtxoList : null,
     );
 
@@ -283,11 +422,11 @@ class WalletProvider with ChangeNotifier {
         if (_message.contains('✅')) _message = '';
         notifyListeners();
       });
-      return true;
+      return result;
     } else {
       _message = '❌ ${result['message']}';
       notifyListeners();
-      return false;
+      return result;
     }
   }
 
@@ -376,11 +515,16 @@ class WalletProvider with ChangeNotifier {
     _isLoadingTxs = false;
     _localPendingTxs.clear();
     _storage.clearSession();
+    _storage.clearPersistentSession();
     notifyListeners();
   }
 
   // Changed from Future<void> to Future<bool>
-  Future<bool> loadSeedWallet(String mnemonic) async {
+  Future<bool> loadSeedWallet(
+    String mnemonic, {
+    bool persistSession = true,
+    bool showLoadedMessage = true,
+  }) async {
     _isLoading = true;
     _message = '⏳ Loading wallet...';
     notifyListeners();
@@ -422,14 +566,19 @@ class WalletProvider with ChangeNotifier {
       );
 
       _isLoading = false;
-      _message = '✅ Wallet loaded successfully!';
+      _message = showLoadedMessage ? '✅ Wallet loaded successfully!' : '';
+      if (persistSession) {
+        _persistCurrentSession();
+      }
       notifyListeners();
       
       // Auto-clear success message
-      Future.delayed(const Duration(seconds: 5), () {
-        if (_message.contains('✅')) _message = '';
-        notifyListeners();
-      });
+      if (showLoadedMessage) {
+        Future.delayed(const Duration(seconds: 5), () {
+          if (_message.contains('✅')) _message = '';
+          notifyListeners();
+        });
+      }
       // Load transaction history in background
       fetchTransactions();
 
@@ -443,7 +592,11 @@ class WalletProvider with ChangeNotifier {
   }
 
   // Changed from Future<void> to Future<bool>
-  Future<bool> loadWifWallet(String wif) async {
+  Future<bool> loadWifWallet(
+    String wif, {
+    bool persistSession = true,
+    bool showLoadedMessage = true,
+  }) async {
     _isLoading = true;
     _message = '⏳ Loading wallet...';
     notifyListeners();
@@ -480,14 +633,19 @@ class WalletProvider with ChangeNotifier {
       );
 
       _isLoading = false;
-      _message = '✅ Wallet loaded successfully!';
+      _message = showLoadedMessage ? '✅ Wallet loaded successfully!' : '';
+      if (persistSession) {
+        _persistCurrentSession();
+      }
       notifyListeners();
       
       // Auto-clear success message
-      Future.delayed(const Duration(seconds: 5), () {
-        if (_message.contains('✅')) _message = '';
-        notifyListeners();
-      });
+      if (showLoadedMessage) {
+        Future.delayed(const Duration(seconds: 5), () {
+          if (_message.contains('✅')) _message = '';
+          notifyListeners();
+        });
+      }
       
       // Load transaction history in background
       fetchTransactions();
@@ -557,6 +715,7 @@ class WalletProvider with ChangeNotifier {
       ? '✅ Migration successful! Funds swept.' 
       : '✅ Migration successful! (Empty wallet)';
     notifyListeners();
+    _persistCurrentSession();
 
     Future.delayed(const Duration(seconds: 5), () {
       if (_message.contains('✅')) _message = '';
