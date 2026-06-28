@@ -8,6 +8,7 @@ import '../config.dart';
 class WalletProvider with ChangeNotifier {
   final WalletService _walletService = WalletService();
   final StorageService _storage = StorageService();
+  static const Duration _rememberSessionTtl = Duration(days: 7);
 
   WalletModel? _wallet;
   bool _isLoading = false;
@@ -199,7 +200,19 @@ class WalletProvider with ChangeNotifier {
 
     final type = stored['type'] as String?;
     final value = stored['value'] as String?;
+    final savedAtRaw = stored['savedAt'] as String?;
     if (type == null || value == null || value.isEmpty) {
+      _storage.clearPersistentSession();
+      return;
+    }
+
+    if (savedAtRaw == null) {
+      _storage.clearPersistentSession();
+      return;
+    }
+
+    final savedAt = DateTime.tryParse(savedAtRaw);
+    if (savedAt == null || DateTime.now().difference(savedAt) > _rememberSessionTtl) {
       _storage.clearPersistentSession();
       return;
     }
