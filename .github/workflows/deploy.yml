@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -20,16 +20,23 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.35.3'
-          channel: 'stable'
+          flutter-version: "3.35.3"
+          channel: "stable"
 
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
       - name: Create dart_defines.json
         run: |
-          echo '{"LIVECOINWATCH_API_KEY": "${{ secrets.LIVECOINWATCH_API_KEY }}"}' > dart_defines.json
-          echo '{"SESSION_ENCRYPTION_SECRET_HEX": "${{ secrets.SESSION_ENCRYPTION_SECRET_HEX }}"}' > dart_defines.json
+          cat > dart_defines.json << 'EOF'
+          {
+            "LIVECOINWATCH_API_KEY": "${{ secrets.LIVECOINWATCH_API_KEY }}",
+            "SESSION_ENCRYPTION_SECRET_HEX": "${{ secrets.SESSION_ENCRYPTION_SECRET_HEX }}"
+          }
+          EOF
 
       - name: Build web
         run: flutter build web --release --base-href "/web-wallet/" --dart-define-from-file=dart_defines.json
