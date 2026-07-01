@@ -9,7 +9,7 @@ const String btcsLegalSummaryText =
 const String btcsLegalResponsibilityText =
   'You are solely responsible for protecting your seed phrase and WIF private key, and for complying with local laws and tax obligations.';
 const String btcsLegalDisclaimerText =
-  'BTCS (Bitcoin Silver) is a fully decentralized, open-source cryptocurrency based on the Proof-of-Work algorithm. There is no corporate entity, no pre-sale, no pre-mine, and no developer allocation. This website is for technical and informational purposes only. The software is provided "as is", without warranty of any kind. Users are solely responsible for securing their private keys and seed phrases and for complying with applicable local laws and tax regulations. BTCS does not constitute a crypto-asset service under EU Regulation 2023/1114 (MiCA).';
+  'BTCS (Bitcoin Silver) is a fully decentralized, open-source cryptocurrency based on the Proof-of-Work algorithm. There is no corporate entity, no pre-sale and no developer allocation. This website is for technical and informational purposes only. The software is provided "as is", without warranty of any kind. Users are solely responsible for securing their private keys and seed phrases and for complying with applicable local laws and tax regulations. BTCS does not constitute a crypto-asset service under EU Regulation 2023/1114 (MiCA).';
 
 class FooterWidget extends StatelessWidget {
   const FooterWidget({super.key});
