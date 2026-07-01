@@ -3,6 +3,14 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 
+const String btcsLegalDisclaimerTitle = 'Legal Disclaimer: ';
+const String btcsLegalSummaryText =
+  'BitcoinSilver Web-Wallet is self-custodial software provided for technical and informational use. It is provided "as is" without warranties.';
+const String btcsLegalResponsibilityText =
+  'You are solely responsible for protecting your seed phrase and WIF private key, and for complying with local laws and tax obligations.';
+const String btcsLegalDisclaimerText =
+  'BTCS (Bitcoin Silver) is a fully decentralized, open-source cryptocurrency based on the Proof-of-Work algorithm. There is no corporate entity, no pre-sale, no pre-mine, and no developer allocation. This website is for technical and informational purposes only. The software is provided "as is", without warranty of any kind. Users are solely responsible for securing their private keys and seed phrases and for complying with applicable local laws and tax regulations. BTCS does not constitute a crypto-asset service under EU Regulation 2023/1114 (MiCA).';
+
 class FooterWidget extends StatelessWidget {
   const FooterWidget({super.key});
 
@@ -78,6 +86,8 @@ class FooterWidget extends StatelessWidget {
                   }
                 },
               ),
+              const SizedBox(height: 16),
+              _buildLegalSection(context),
               const SizedBox(height: 20),
               const Divider(color: Colors.white10),
               const SizedBox(height: 10),
@@ -299,6 +309,81 @@ class FooterWidget extends StatelessWidget {
       },
     );
   }
+
+  Widget _buildLegalSection(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            btcsLegalDisclaimerTitle,
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            btcsLegalSummaryText,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.7),
+              fontSize: 12,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            btcsLegalResponsibilityText,
+            style: TextStyle(
+              color: Colors.redAccent.withValues(alpha: 0.9),
+              fontSize: 12,
+              height: 1.45,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          Material(
+            type: MaterialType.transparency,
+            child: Theme(
+              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(bottom: 8),
+                iconColor: Colors.white54,
+                collapsedIconColor: Colors.white54,
+                title: Text(
+                  'Read full legal text',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.75),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                children: [
+                  Text(
+                    btcsLegalDisclaimerText,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.55),
+                      fontSize: 12,
+                      height: 1.5,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }  
 
   Widget _buildBottomLink(String label, dynamic icon) {
     return MouseRegion(

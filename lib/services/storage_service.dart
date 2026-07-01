@@ -9,6 +9,7 @@ class StorageService {
   static const String _keyPrefix = 'btcs_';
   static const String _persistentSessionKey = '${_keyPrefix}persistent_session';
   static const String _persistentSessionEnabledKey = '${_keyPrefix}persistent_session_enabled';
+  static const String _legalDisclaimerAcceptedKey = '${_keyPrefix}legal_disclaimer_accepted';
 
   // Simple AES-like encryption using XOR with password hash
   String _encrypt(String data, String password) {
@@ -110,6 +111,20 @@ class StorageService {
 
   bool loadPersistentSessionEnabled() {
     return web.window.localStorage.getItem(_persistentSessionEnabledKey) == '1';
+  }
+
+  bool hasPersistentSession() {
+    final value = web.window.localStorage.getItem(_persistentSessionKey);
+    return value != null && value.isNotEmpty;
+  }
+
+  void saveLegalDisclaimerAccepted(bool accepted) {
+    web.window.localStorage
+        .setItem(_legalDisclaimerAcceptedKey, accepted ? '1' : '0');
+  }
+
+  bool loadLegalDisclaimerAccepted() {
+    return web.window.localStorage.getItem(_legalDisclaimerAcceptedKey) == '1';
   }
 
   bool savePersistentSession(

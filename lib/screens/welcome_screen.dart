@@ -2,12 +2,61 @@ import 'package:flutter/material.dart';
 import 'setup_screen.dart';
 import '../theme/app_theme.dart';
 import '../widgets/footer_widget.dart';
+import '../services/storage_service.dart';
 
-class WelcomeScreen extends StatelessWidget {
+class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
 
   @override
+  State<WelcomeScreen> createState() => _WelcomeScreenState();
+}
+
+class _WelcomeScreenState extends State<WelcomeScreen> {
+  final StorageService _storage = StorageService();
+  bool _agreementGateEnabled = true;
+  bool _hasAgreed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final hasSavedSession =
+        _storage.loadPersistentSessionEnabled() && _storage.hasPersistentSession();
+    final hasAcceptedDisclaimer = _storage.loadLegalDisclaimerAccepted();
+
+    if (hasSavedSession || hasAcceptedDisclaimer) {
+      _agreementGateEnabled = false;
+      _hasAgreed = true;
+    }
+  }
+
+  void _handleAgreementChanged(bool? value) {
+    final agreed = value ?? false;
+    setState(() {
+      _hasAgreed = agreed;
+    });
+    _storage.saveLegalDisclaimerAccepted(agreed);
+  }
+
+  void _openSetup(bool useSeed) {
+    if (_agreementGateEnabled && !_hasAgreed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please review and accept the legal disclaimer before continuing.'),
+        ),
+      );
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => SetupScreen(useSeed: useSeed)),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final canProceed = !_agreementGateEnabled || _hasAgreed;
+
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -57,16 +106,18 @@ class WelcomeScreen extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 20),
+                        if (_agreementGateEnabled) ...[
+                          _buildDisclaimerSection(),
+                          const SizedBox(height: 20),
+                        ],
                         _buildOptionCard(
                           context,
                           title: 'Seed Phrase Wallet',
                           description: 'Recommended. Modern 12 or 24-word recovery phrase. Secure and easy to backup.',
                           icon: Icons.vpn_key_rounded,
                           color: AppTheme.primaryColor,
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const SetupScreen(useSeed: true)),
-                          ),
+                          enabled: canProceed,
+                          onTap: () => _openSetup(true),
                         ),
                         const SizedBox(height: 20),
                         _buildOptionCard(
@@ -75,10 +126,8 @@ class WelcomeScreen extends StatelessWidget {
                           description: 'Load an existing wallet using a raw Private Key (WIF).',
                           icon: Icons.account_balance_wallet_rounded,
                           color: AppTheme.secondaryColor,
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const SetupScreen(useSeed: false)),
-                          ),
+                          enabled: canProceed,
+                          onTap: () => _openSetup(false),
                         ),
                         const SizedBox(height: 10),
                         const Text(
@@ -114,17 +163,20 @@ class WelcomeScreen extends StatelessWidget {
     required String description,
     required IconData icon,
     required Color color,
+    required bool enabled,
     required VoidCallback onTap,
   }) {
     return MouseRegion(
-      cursor: SystemMouseCursors.click,
+      cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.forbidden,
       child: GestureDetector(
-        onTap: onTap,
+        onTap: enabled ? onTap : null,
         child: Container(
           width: 500,
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: AppTheme.surfaceColor.withValues(alpha: 0.5),
+            color: enabled
+                ? AppTheme.surfaceColor.withValues(alpha: 0.5)
+                : AppTheme.surfaceColor.withValues(alpha: 0.28),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
             boxShadow: [
@@ -163,16 +215,146 @@ class WelcomeScreen extends StatelessWidget {
                       description,
                       style: TextStyle(
                         fontSize: 14,
-                        color: Colors.white.withValues(alpha: 0.6),
+                        color: Colors.white.withValues(alpha: enabled ? 0.6 : 0.45),
                       ),
                     ),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right_rounded, color: Colors.white24),
+              Icon(
+                enabled ? Icons.chevron_right_rounded : Icons.lock_outline,
+                color: Colors.white24,
+              ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildDisclaimerSection() {
+    return Container(
+      width: 500,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceColor.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: AppTheme.accentColor.withValues(alpha: 0.25),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            btcsLegalDisclaimerTitle,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            btcsLegalSummaryText,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.78),
+              fontSize: 13,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Material(
+            type: MaterialType.transparency,
+            child: Theme(
+              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: EdgeInsets.zero,
+                iconColor: Colors.white54,
+                collapsedIconColor: Colors.white54,
+                title: Text(
+                  'Read full legal text',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.74),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      btcsLegalDisclaimerText,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.65),
+                        fontSize: 12,
+                        height: 1.45,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Wallet Usage and Security Responsibility',
+            style: TextStyle(
+              color: AppTheme.accentColor.withValues(alpha: 0.95),
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'This wallet is self-custodial. BitcoinSilver cannot recover lost credentials. Keep your seed phrase and WIF private key offline, confidential, and backed up in secure locations. Anyone with access to these credentials can irreversibly control your funds.',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.75),
+              fontSize: 13,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.redAccent.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.redAccent.withValues(alpha: 0.35)),
+            ),
+            child: const Text(
+              'Critical: You are solely responsible for keeping your seed phrase and WIF secure.',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Material(
+            type: MaterialType.transparency,
+            child: CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _hasAgreed,
+              onChanged: _handleAgreementChanged,
+              activeColor: AppTheme.primaryColor,
+              checkColor: Colors.white,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: Text(
+                'I have read and agree to the legal disclaimer and understand my responsibility to secure my seed phrase and WIF.',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.9),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
