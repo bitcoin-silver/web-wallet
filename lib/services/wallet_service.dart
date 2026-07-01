@@ -624,7 +624,14 @@ class WalletService {
   // Get transaction history for an address via the Explorer API.
   // Uses server-side pagination with offset and limit.
   // ---------------------------------------------------------------------------
-  Future<Map<String, dynamic>> getTransactions(String address, {int offset = 0, int limit = 10}) async {
+  Future<Map<String, dynamic>> getTransactions(
+    String address, {
+    int offset = 0,
+    int limit = 10,
+    String? rpcUrl,
+    String? rpcUser,
+    String? rpcPassword,
+  }) async {
     const String explorerBase = 'https://explorer.bitcoinsilver.top/api/getaddress';
     final url = '$explorerBase/$address/txs?offset=$offset&limit=$limit';
 
@@ -645,15 +652,67 @@ class WalletService {
         final amount = (tx['amount'] as num?)?.toDouble() ?? 0.0;
         final timestamp = tx['timestamp'] as int?;
 
+        int confirmations = 0;
+        final rawConfirmations =
+            tx['confirmations'] ?? tx['confirmation'] ?? tx['confirmationsCount'];
+        if (rawConfirmations is num) {
+          confirmations = rawConfirmations.toInt();
+        } else if (rawConfirmations is String) {
+          confirmations = int.tryParse(rawConfirmations) ?? 0;
+        } else {
+          final status = tx['status'];
+          if (status is Map<String, dynamic>) {
+            final statusConf = status['confirmations'];
+            if (statusConf is num) {
+              confirmations = statusConf.toInt();
+            } else if (statusConf is String) {
+              confirmations = int.tryParse(statusConf) ?? 0;
+            } else if (status['confirmed'] == true) {
+              confirmations = 1;
+            }
+          } else if (tx['confirmed'] == true) {
+            confirmations = 1;
+          }
+        }
+
         return {
           'txid': tx['txid'] as String,
           'amount': amount.abs(),
           'direction': txType == 'sent' ? 'sent' : txType == 'received' ? 'received' : 'received',
-          'confirmations': 0,
+          'confirmations': confirmations,
           'timestamp': timestamp,
           'counterparty': null,
         };
       }).toList();
+
+      final canUseRpc = (rpcUrl?.isNotEmpty ?? false);
+      if (canUseRpc) {
+        for (final tx in parsedTransactions) {
+          final current = tx['confirmations'];
+          final alreadyKnown = current is int ? current > 0 : false;
+          if (alreadyKnown) continue;
+
+          final txid = tx['txid'] as String;
+          try {
+            final rpc = await rpcRequest(
+              rpcUrl!,
+              rpcUser ?? '',
+              rpcPassword ?? '',
+              'getrawtransaction',
+              [txid, true],
+            );
+            final rpcResult = rpc?['result'];
+            final rpcConf = rpcResult is Map<String, dynamic>
+                ? rpcResult['confirmations']
+                : null;
+            if (rpcConf is num) {
+              tx['confirmations'] = rpcConf.toInt();
+            }
+          } catch (_) {
+            // Keep explorer confirmation fallback when txindex/raw tx lookup is unavailable.
+          }
+        }
+      }
 
       return {
         'transactions': parsedTransactions,

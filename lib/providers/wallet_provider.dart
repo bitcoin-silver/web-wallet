@@ -142,6 +142,9 @@ class WalletProvider with ChangeNotifier {
         _wallet!.address,
         offset: _transactions.length,
         limit: 10,
+        rpcUrl: _rpcUrl,
+        rpcUser: _rpcUser,
+        rpcPassword: _rpcPassword,
       );
 
       final rawList = data['transactions'] as List<Map<String, dynamic>>? ?? [];
@@ -405,7 +408,14 @@ class WalletProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final data = await _walletService.getTransactions(_wallet!.address, offset: 0, limit: 10);
+      final data = await _walletService.getTransactions(
+        _wallet!.address,
+        offset: 0,
+        limit: 10,
+        rpcUrl: _rpcUrl,
+        rpcUser: _rpcUser,
+        rpcPassword: _rpcPassword,
+      );
       final rawList = data['transactions'] as List<Map<String, dynamic>>? ?? [];
       _txCount = data['txCount'] as int? ?? 0;
 
