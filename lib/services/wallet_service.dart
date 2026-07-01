@@ -378,7 +378,7 @@ class WalletService {
       if (response?['error'] != null) {
         return {
           'success': false,
-          'message': 'Node failed to estimate fee. Please enter a manual fee rate.',
+          'message': 'Node failed to estimate fee. Please enter a manual fee rate on send.',
           'reason': 'rpc-error',
         };
       }
@@ -390,7 +390,7 @@ class WalletService {
       if (feeRate == null || feeRate <= 0) {
         return {
           'success': false,
-          'message': 'Node could not estimate fee (feerate unavailable or -1). Enter a manual fee rate.',
+          'message': 'Node could not estimate a network fee at this time. Enter a manual fee rate on send.',
           'reason': 'no-estimate',
         };
       }
@@ -403,7 +403,7 @@ class WalletService {
     } catch (_) {
       return {
         'success': false,
-        'message': 'Fee estimation request failed. Enter a manual fee rate.',
+        'message': 'Fee estimation request failed. Enter a manual fee rate on send.',
         'reason': 'request-failed',
       };
     }

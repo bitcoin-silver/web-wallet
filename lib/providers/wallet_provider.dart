@@ -217,23 +217,65 @@ class WalletProvider with ChangeNotifier {
       return;
     }
 
-    bool restored = false;
-    if (type == 'seed') {
-      restored = await loadSeedWallet(
-        value,
-        persistSession: false,
-        showLoadedMessage: false,
-      );
-    } else if (type == 'wif') {
-      restored = await loadWifWallet(
-        value,
-        persistSession: false,
-        showLoadedMessage: false,
-      );
+    final restored = await _restoreWalletFromPersistentSession(type, value);
+
+    if (restored) {
+      _message = '✅ Wallet restored.';
+      notifyListeners();
+
+      Future.delayed(const Duration(seconds: 5), () {
+        if (_message == '✅ Wallet restored.') {
+          _message = '';
+          notifyListeners();
+        }
+      });
     }
 
     if (!restored) {
       _storage.clearPersistentSession();
+    }
+  }
+
+  Future<bool> _restoreWalletFromPersistentSession(String type, String value) async {
+    try {
+      if (type == 'seed') {
+        final walletData = await _walletService.getWalletFromMnemonic(value);
+        if (walletData == null) return false;
+
+        _wallet = WalletModel(
+          address: walletData['address']!,
+          privateKey: walletData['privateKey']!,
+          mnemonic: value,
+          type: WalletType.seed,
+          balance: 0.0,
+          unconfirmedBalance: 0.0,
+          isPending: false,
+        );
+      } else if (type == 'wif') {
+        final address = _walletService.getAddressFromWif(value);
+        if (address == null) return false;
+
+        _wallet = WalletModel(
+          address: address,
+          privateKey: value,
+          type: WalletType.wif,
+          balance: 0.0,
+          unconfirmedBalance: 0.0,
+          isPending: false,
+        );
+      } else {
+        return false;
+      }
+
+      _isLoading = false;
+      _message = '';
+
+      // Best-effort network sync after local restore so cold starts still work offline.
+      refreshBalance();
+      fetchTransactions();
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -528,7 +570,9 @@ class WalletProvider with ChangeNotifier {
     _isLoadingTxs = false;
     _localPendingTxs.clear();
     _storage.clearSession();
-    _storage.clearPersistentSession();
+    if (!_rememberSessionEnabled) {
+      _storage.clearPersistentSession();
+    }
     notifyListeners();
   }
 

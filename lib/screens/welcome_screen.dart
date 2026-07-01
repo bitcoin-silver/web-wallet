@@ -19,14 +19,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   @override
   void initState() {
     super.initState();
-    final hasSavedSession =
-        _storage.loadPersistentSessionEnabled() && _storage.hasPersistentSession();
     final hasAcceptedDisclaimer = _storage.loadLegalDisclaimerAccepted();
 
-    if (hasSavedSession || hasAcceptedDisclaimer) {
-      _agreementGateEnabled = false;
-      _hasAgreed = true;
-    }
+    _agreementGateEnabled = true;
+    _hasAgreed = hasAcceptedDisclaimer;
   }
 
   void _handleAgreementChanged(bool? value) {
