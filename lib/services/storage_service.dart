@@ -118,13 +118,8 @@ class StorageService {
     return value != null && value.isNotEmpty;
   }
 
-  void saveLegalDisclaimerAccepted(bool accepted) {
-    web.window.localStorage
-        .setItem(_legalDisclaimerAcceptedKey, accepted ? '1' : '0');
-  }
-
-  bool loadLegalDisclaimerAccepted() {
-    return web.window.localStorage.getItem(_legalDisclaimerAcceptedKey) == '1';
+  void clearLegalDisclaimerAccepted() {
+    web.window.localStorage.removeItem(_legalDisclaimerAcceptedKey);
   }
 
   bool savePersistentSession(

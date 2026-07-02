@@ -950,8 +950,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     }
 
     final confirmationsLabel = tx.confirmations == 1
-        ? '1 CONFIRMATION'
-        : '${tx.confirmations} CONFIRMATIONS';
+        ? '1 conf'
+        : '${tx.confirmations} conf';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
@@ -1055,6 +1055,38 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             ElevatedButton(
               onPressed: () async {
                 Navigator.pop(dialogContext);
+
+                // Safety gate 1: require smart-fee availability before sweep migration.
+                if (!isEmpty) {
+                  await provider.fetchFeeRate();
+                  if (!provider.feeRateReady) {
+                    if (!dashboardContext.mounted) return;
+                    _showMigrationBlockedDialog(
+                      dashboardContext,
+                      reason:
+                          'Smart fee is unavailable. Migration cannot continue safely right now.\n\n'
+                          'Details: ${provider.feeRateStatusMessage}',
+                    );
+                    return;
+                  }
+                }
+
+                // Safety gate 2: pending transactions must be fully confirmed before migration.
+                await provider.refreshBalance();
+                final latestWallet = provider.wallet;
+                if (latestWallet == null) return;
+                if (latestWallet.hasPending) {
+                  if (!dashboardContext.mounted) return;
+                  _showMigrationBlockedDialog(
+                    dashboardContext,
+                    reason:
+                        'Pending transactions detected. Migration cannot continue safely until all transactions are confirmed.\n\n'
+                        'Confirmed: ${latestWallet.balance.toStringAsFixed(8)} BTCS\n'
+                        'Unconfirmed: ${latestWallet.unconfirmedBalance.toStringAsFixed(8)} BTCS',
+                  );
+                  return;
+                }
+
                 final success = await provider.migrateToSeed(words: _migrationSeedWords);
                 if (success && dashboardContext.mounted) {
                   _showBackupDialog(dashboardContext, provider);
@@ -1068,6 +1100,22 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showMigrationBlockedDialog(BuildContext context, {required String reason}) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Migration Blocked'),
+        content: Text(reason),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
       ),
     );
   }
@@ -1801,7 +1849,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         const SizedBox(height: 10),
         const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Text('BTCS Web-Wallet version 2.5', 
+              child: Text('BTCS Web-Wallet version 2.6', 
               style: TextStyle(color: Colors.white54, fontSize: 12),
               textAlign: TextAlign.center
         ),      

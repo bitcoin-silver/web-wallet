@@ -9,6 +9,8 @@ class WalletProvider with ChangeNotifier {
   final WalletService _walletService = WalletService();
   final StorageService _storage = StorageService();
   static const Duration _rememberSessionTtl = Duration(days: 7);
+  static const int _maxMigrationSweepInputs = 120;
+  static const int _maxMigrationSweepVbytes = 90000;
 
   WalletModel? _wallet;
   bool _isLoading = false;
@@ -461,6 +463,48 @@ class WalletProvider with ChangeNotifier {
     _message = '⏳ Sending transaction...';
     notifyListeners();
 
+    if (_selectedUtxoKeys.isEmpty) {
+      try {
+        final allUtxos = await _walletService.getUtxos(
+          _rpcUrl,
+          _rpcUser,
+          _rpcPassword,
+          _wallet!.address,
+        );
+        final confirmedUtxos = allUtxos
+            .where((u) =>
+                u['txid'] != 'pending_marker' &&
+                ((u['confirmations'] as int?) ?? 0) > 0)
+            .toList();
+
+        final confirmedTotal = confirmedUtxos.fold<double>(
+          0.0,
+          (sum, u) => sum + (u['amount'] as num).toDouble(),
+        );
+        final nearSweep = amount >= (confirmedTotal - 0.00001);
+        final estimatedSweepVbytes = 11 + (confirmedUtxos.length * 68) + 31;
+        final tooLargeForSingleSweep = confirmedUtxos.length > _maxMigrationSweepInputs ||
+            estimatedSweepVbytes > _maxMigrationSweepVbytes;
+
+        // TODO(btcs): Re-enable chunked send only with transactional safety guarantees
+        // (durable recovery checkpoint, resumable progress, and rollback-safe UX).
+        if (nearSweep && tooLargeForSingleSweep && confirmedUtxos.isNotEmpty) {
+          _isLoading = false;
+          _message =
+              '❌ Send blocked: this transfer would require multiple chained transactions '
+              'to complete safely. Automatic chunked send is disabled. Please split the '
+              'transfer manually into smaller sends.';
+          notifyListeners();
+          return {
+            'success': false,
+            'message': 'Send blocked: chunked send required for current UTXO set.',
+          };
+        }
+      } catch (_) {
+        // Fall through to regular single-transaction path if preflight cannot complete.
+      }
+    }
+
     final result = await _walletService.sendTransaction(
       _rpcUrl,
       _rpcUser,
@@ -572,6 +616,66 @@ class WalletProvider with ChangeNotifier {
     return await _walletService.getNetworkInfo(_rpcUrl, _rpcUser, _rpcPassword);
   }
 
+  Future<List<Map<String, dynamic>>> _getConfirmedMigrationUtxos(
+    String sourceAddress,
+  ) async {
+    final allUtxos = await _walletService.getUtxos(
+      _rpcUrl,
+      _rpcUser,
+      _rpcPassword,
+      sourceAddress,
+    );
+
+    return allUtxos
+        .where((u) =>
+            u['txid'] != 'pending_marker' &&
+            ((u['confirmations'] as int?) ?? 0) > 0)
+        .toList();
+  }
+
+  Future<String?> _validateMigrationSweepGate(
+    List<Map<String, dynamic>> confirmedUtxos,
+    double confirmedBalance,
+  ) async {
+    try {
+      if (confirmedUtxos.isEmpty) {
+        return 'Migration blocked: no confirmed inputs are available.';
+      }
+
+      final inputCount = confirmedUtxos.length;
+      final estimatedVbytes = inputCount > _maxMigrationSweepInputs
+          ? 11 + (_maxMigrationSweepInputs * 68) + 31
+          : 11 + (inputCount * 68) + 31;
+
+      final feeResolution = await _walletService.resolveFeeRate(
+        _rpcUrl,
+        _rpcUser,
+        _rpcPassword,
+      );
+
+      if (feeResolution['success'] != true) {
+        final detail =
+            (feeResolution['message'] as String?) ?? 'Smart fee unavailable.';
+        return 'Migration blocked: $detail';
+      }
+
+      final feeRate = (feeResolution['feeRate'] as num).toDouble();
+      final estimatedFee = double.parse(
+        (feeRate * estimatedVbytes / 1000).toStringAsFixed(8),
+      );
+
+      if (confirmedBalance <= estimatedFee + 0.00000546) {
+        return 'Migration blocked: confirmed balance '
+            '(${confirmedBalance.toStringAsFixed(8)} BTCS) is too low after '
+            'estimated fee (${estimatedFee.toStringAsFixed(8)} BTCS).';
+      }
+
+      return null;
+    } catch (_) {
+      return 'Migration blocked: preflight safety checks failed due to a network or node error.';
+    }
+  }
+
   void logout() {
     _wallet = null;
     _isLoading = false;
@@ -580,6 +684,7 @@ class WalletProvider with ChangeNotifier {
     _isLoadingTxs = false;
     _localPendingTxs.clear();
     _storage.clearSession();
+    _storage.clearLegalDisclaimerAccepted();
     if (!_rememberSessionEnabled) {
       _storage.clearPersistentSession();
     }
@@ -739,7 +844,37 @@ class WalletProvider with ChangeNotifier {
     final oldAddress = _wallet!.address;
 
     await refreshBalance();
-    final currentBalance = _wallet!.balance;
+    final latestWallet = _wallet;
+    if (latestWallet == null) {
+      _isLoading = false;
+      _message = '❌ Migration failed: wallet state unavailable.';
+      notifyListeners();
+      return false;
+    }
+
+    if (latestWallet.hasPending) {
+      _isLoading = false;
+      _message = '❌ Migration blocked: pending transactions detected. Wait for confirmations and retry.';
+      notifyListeners();
+      return false;
+    }
+
+    final currentBalance = latestWallet.balance;
+    List<Map<String, dynamic>> migrationUtxos = const [];
+
+    if (currentBalance > 0.00001 && !skipSweep) {
+      migrationUtxos = await _getConfirmedMigrationUtxos(oldAddress);
+      final migrationGateReason = await _validateMigrationSweepGate(
+        migrationUtxos,
+        currentBalance,
+      );
+      if (migrationGateReason != null) {
+        _isLoading = false;
+        _message = '❌ $migrationGateReason';
+        notifyListeners();
+        return false;
+      }
+    }
     
     final walletData = await _walletService.generateNewSeedWallet(words: words);
     final mnemonic = walletData['mnemonic']!;
@@ -747,26 +882,41 @@ class WalletProvider with ChangeNotifier {
     final newWif = walletData['privateKey']!;
 
     if (currentBalance > 0.00001 && !skipSweep) {
-      _message = '⏳ Sweeping funds to new address...';
-      notifyListeners();
+      final estimatedSweepVbytes = 11 + (migrationUtxos.length * 68) + 31;
+      final useChunkedSweep = migrationUtxos.length > _maxMigrationSweepInputs ||
+          estimatedSweepVbytes > _maxMigrationSweepVbytes;
 
-      final result = await _walletService.sendTransaction(
-        _rpcUrl,
-        _rpcUser,
-        _rpcPassword,
-        oldWif,
-        oldAddress,
-        newAddress,
-        currentBalance,
-      );
-
-      if (!result['success']) {
+        // TODO(btcs): Re-enable chunked migration only after implementing
+        // persistent seed checkpointing and safe partial-failure recovery.
+      if (useChunkedSweep) {
         _isLoading = false;
-        _message = '❌ Migration failed: ${result['message']}';
+        _message =
+            '❌ Migration blocked: this wallet requires chunked sweep to migrate safely, '
+            'and automatic chunked migration is disabled. Please consolidate manually and retry.';
         notifyListeners();
-        return false; // Exits safely without losing access to the old WIF wallet!
+        return false;
+      } else {
+        _message = '⏳ Sweeping funds to new address...';
+        notifyListeners();
+
+        final result = await _walletService.sendTransaction(
+          _rpcUrl,
+          _rpcUser,
+          _rpcPassword,
+          oldWif,
+          oldAddress,
+          newAddress,
+          currentBalance,
+        );
+
+        if (!result['success']) {
+          _isLoading = false;
+          _message = '❌ Migration failed: ${result['message']}';
+          notifyListeners();
+          return false; // Exits safely without losing access to the old WIF wallet!
+        }
+        _localPendingTxs.add(result['txid'] as String);
       }
-      _localPendingTxs.add(result['txid'] as String);
     }
 
     _wallet = WalletModel(

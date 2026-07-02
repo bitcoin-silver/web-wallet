@@ -18,7 +18,29 @@ A modern, secure, non-custodial, client-side signing wallet for the Bitcoin Silv
   <a href="https://explorer.bitcoinsilver.top">Explorer</a>
 </p>
 
-## 🚀 What's New in v2.5
+## 🚀 What's New in v2.6
+
+### 🛑 Safe Transfer Guardrails (Migration + Send)
+
+This release prioritizes safety-first transfer behavior for large and complex wallets:
+
+- **Migration Preflight Gates**: Migration now blocks early when smart-fee is unavailable, pending transactions exist, or sweep conditions are unsafe.
+- **No Automatic Chunked Sweep**: If a migration/send would require chained chunked transactions, the wallet now **aborts with a clear warning** instead of attempting partial multi-step execution.
+- **Large Send Safety Block**: Near-max sends that exceed safe single-sweep limits are blocked and users are instructed to split manually.
+
+### 🧮 Satoshi-Level Transaction Math
+
+- **Precision Upgrade**: Core send logic now uses satoshi-based arithmetic for fee/input/output calculations to reduce floating-point rounding edge cases.
+- **More Deterministic Fees**: Sweep/change math is calculated in integer satoshis before final serialization and broadcast.
+
+### ✅ Migration Reliability Improvements
+
+- **Pending Transaction Hard Stop**: Migration is blocked until mempool activity is confirmed.
+- **Controlled Failure Behavior**: Unsafe migration states are rejected before broadcast wherever possible.
+
+---
+
+## What's New in v2.5
 
 ### 🪙 Coin Control (Advanced Send)
 

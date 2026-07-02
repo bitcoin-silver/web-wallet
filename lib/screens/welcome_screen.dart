@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'setup_screen.dart';
 import '../theme/app_theme.dart';
 import '../widgets/footer_widget.dart';
-import '../services/storage_service.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -12,17 +11,14 @@ class WelcomeScreen extends StatefulWidget {
 }
 
 class _WelcomeScreenState extends State<WelcomeScreen> {
-  final StorageService _storage = StorageService();
   bool _agreementGateEnabled = true;
   bool _hasAgreed = false;
 
   @override
   void initState() {
     super.initState();
-    final hasAcceptedDisclaimer = _storage.loadLegalDisclaimerAccepted();
-
     _agreementGateEnabled = true;
-    _hasAgreed = hasAcceptedDisclaimer;
+    _hasAgreed = false;
   }
 
   void _handleAgreementChanged(bool? value) {
@@ -30,7 +26,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     setState(() {
       _hasAgreed = agreed;
     });
-    _storage.saveLegalDisclaimerAccepted(agreed);
   }
 
   void _openSetup(bool useSeed) {

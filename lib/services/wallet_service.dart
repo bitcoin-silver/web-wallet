@@ -420,6 +420,13 @@ class WalletService {
     double? manualFeeRateCoinPerKb,
     List<Map<String, dynamic>>? preSelectedUtxos,
   }) async {
+    int toSats(num coins) => (coins.toDouble() * 1e8).round();
+    double toCoins(int sats) => sats / 1e8;
+    int estimateFeeSats(double feeRateCoinPerKb, int vbytes) {
+      final feeCoins = feeRateCoinPerKb * vbytes / 1000;
+      return toSats(feeCoins);
+    }
+
     // ── 1. Get UTXOs ────────────────────────────────────────────────────────
     final allUtxos = await getUtxos(rpcUrl, rpcUser, rpcPassword, fromAddress);
     final utxos = (preSelectedUtxos != null && preSelectedUtxos.isNotEmpty)
@@ -469,9 +476,12 @@ class WalletService {
       }
     }
 
-    final totalAvailable = utxos.fold(
-        0.0, (sum, u) => sum + (u['amount'] as num).toDouble());
-    final bool isSweep = amount >= totalAvailable - 0.00001;
+    final totalAvailableSats = utxos.fold<int>(
+      0,
+      (sum, u) => sum + toSats((u['amount'] as num).toDouble()),
+    );
+    final requestedAmountSats = toSats(amount);
+    final bool isSweep = requestedAmountSats >= totalAvailableSats - 1000;
 
     // Sort largest-first for efficient UTXO selection
     utxos.sort((a, b) => ((b['amount'] as num).toDouble())
@@ -499,10 +509,10 @@ class WalletService {
 
     // ── 4. UTXO selection + sizing loop ─────────────────────────────────────
     final selectedUtxos = <Map<String, dynamic>>[];
-    double inputSum = 0.0;
+    int inputSumSats = 0;
     for (int i = 0; i < utxos.length; i++) {
       selectedUtxos.add(utxos[i]);
-      inputSum += (utxos[i]['amount'] as num).toDouble();
+      inputSumSats += toSats((utxos[i]['amount'] as num).toDouble());
 
       if (isSweep && i < utxos.length - 1) continue; 
 
@@ -523,9 +533,9 @@ class WalletService {
         txSize += destOutputSize + changeOutputSize;
       }
 
-      final actualFee = double.parse((feeRate * txSize / 1000).toStringAsFixed(8));
-      final needed = isSweep ? actualFee : amount + actualFee;
-      if (inputSum < needed) continue; // Loop until input matches costs
+      final actualFeeSats = estimateFeeSats(feeRate, txSize);
+      final neededSats = isSweep ? actualFeeSats : requestedAmountSats + actualFeeSats;
+      if (inputSumSats < neededSats) continue; // Loop until input matches costs
 
       // ── Build BTCSTxInput list ─────────────────────────────────────────
       final inputs = selectedUtxos.map((u) {
@@ -543,7 +553,7 @@ class WalletService {
           txid: u['txid'] as String,
           vout: u['vout'] as int,
           scriptPubKey: Uint8List.fromList(HEX.decode(scriptHex)),
-          satoshis: ((u['amount'] as num).toDouble() * 1e8).round(),
+          satoshis: toSats((u['amount'] as num).toDouble()),
         );
       }).toList();
 
@@ -551,7 +561,7 @@ class WalletService {
       final outputs = <BTCSTxOutput>[];
       try {
         if (isSweep) {
-          final sweepSats = ((inputSum - actualFee) * 1e8).round();
+          final sweepSats = inputSumSats - actualFeeSats;
           if (sweepSats <= 546) {
             return {'success': false, 'message': 'Balance too low to cover fees.'};
           }
@@ -562,9 +572,9 @@ class WalletService {
         } else {
           outputs.add(BTCSTxOutput(
             scriptPubKey: BTCSSigner.scriptFromAddress(toAddress),
-            satoshis: (amount * 1e8).round(),
+            satoshis: requestedAmountSats,
           ));
-          final changeSats = ((inputSum - amount - actualFee) * 1e8).round();
+          final changeSats = inputSumSats - requestedAmountSats - actualFeeSats;
           if (changeSats > 546) {
             outputs.add(BTCSTxOutput(
               scriptPubKey: BTCSSigner.scriptFromAddress(fromAddress),
@@ -599,7 +609,7 @@ class WalletService {
         return {
           'success': true,
           'txid': sendResult!['result'],
-          'fee': actualFee,
+          'fee': toCoins(actualFeeSats),
         };
       }
 
@@ -616,7 +626,7 @@ class WalletService {
 
     return {
       'success': false,
-      'message': 'Insufficient funds. Available: ${inputSum.toStringAsFixed(8)} BTCS.',
+      'message': 'Insufficient funds. Available: ${toCoins(inputSumSats).toStringAsFixed(8)} BTCS.',
     };
   }
 

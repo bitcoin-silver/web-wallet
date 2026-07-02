@@ -3,7 +3,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 
-const String btcsLegalDisclaimerTitle = 'Legal Disclaimer: ';
+const String btcsLegalDisclaimerTitle = 'Disclaimer: ';
 const String btcsLegalSummaryText =
   'BitcoinSilver Web-Wallet is self-custodial software provided for technical and informational use. It is provided "as is" without warranties.';
 const String btcsLegalResponsibilityText =
