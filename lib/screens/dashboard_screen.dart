@@ -1006,8 +1006,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                     Expanded(
                       child: Text(
                         isEmpty
-                            ? 'NOTICE: This will generate a NEW seed phrase. No funds will be moved. BACKUP the generated seed phrase IMMEDIATELY ! after migration.'
-                            : 'WARNING: This will MOVE ALL FUNDS to a NEW address. BACKUP the generated seed phrase IMMEDIATELY ! \n This action is irreversible. If you FAIL TO BACKUP the new seed phrase, you will LOSE ACCESS to your funds FOREVER.',
+                            ? 'NOTICE: This will generate a NEW seed phrase wallet including a NEW address. No funds will be moved. BACKUP the generated seed phrase IMMEDIATELY ! after migration.'
+                            : 'WARNING: This will MOVE ALL FUNDS to a NEWLY GENERATED wallet address derived from your new seed phrase. BACKUP the generated seed phrase IMMEDIATELY ! \n This action is irreversible. If you FAIL TO BACKUP the new seed phrase, you will LOSE ACCESS to your funds FOREVER.',
                         style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
                       ),
                     ),
@@ -1017,8 +1017,9 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               const SizedBox(height: 12),
               Text(
                 isEmpty
-                    ? 'Your current wallet is empty. We will simply generate a NEW seed phrase wallet for you to use going forward.'
-                    : 'This will generate a NEW seed phrase and send ALL your funds to the new address. '
+                    ? 'Your current wallet is empty. We will simply generate a NEW seed phrase wallet including a NEW address for you to use going forward.'
+                    : 'This will generate a NEW seed phrase and send ALL your funds to a NEWLY GENERATED wallet address. '
+                        'The new address will be shown in the backup dialog after migration. '
                         'You MUST backup the new seed phrase immediately after migration.\n\n'
                         'A small network fee will apply.',
               ),
@@ -1871,6 +1872,34 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             const Text('CRITICAL: Never share these with anyone!', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
             const SizedBox(height: 20),
             if (wallet.type == WalletType.seed) ...[
+              const Text('New Wallet Address:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8)),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: SelectableText(
+                        wallet.address,
+                        style: const TextStyle(fontFamily: 'monospace'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(Icons.copy_rounded, size: 18),
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: wallet.address));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('New wallet address copied')),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [

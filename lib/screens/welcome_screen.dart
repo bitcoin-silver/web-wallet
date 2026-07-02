@@ -128,7 +128,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                         const SizedBox(height: 10),
                         const Padding(
                                 padding: EdgeInsets.symmetric(horizontal: 16),
-                                child: Text('BTCS Web-Wallet version 2.5', 
+                                child: Text('BTCS Web-Wallet version 2.6', 
                                 style: TextStyle(color: Colors.white54, fontSize: 12),
                                 textAlign: TextAlign.center
                           ),      
