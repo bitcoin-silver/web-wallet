@@ -32,7 +32,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     if (_agreementGateEnabled && !_hasAgreed) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please review and accept the legal disclaimer before continuing.'),
+          content: Text('Please review and accept the disclaimer before continuing.'),
         ),
       );
       return;
@@ -239,7 +239,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            btcsLegalDisclaimerTitle,
+            btcsDisclaimerTitle,
             style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.w800,
@@ -248,7 +248,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           ),
           const SizedBox(height: 10),
           Text(
-            btcsLegalSummaryText,
+            btcsDisclaimerSummaryText,
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.78),
               fontSize: 13,
@@ -266,7 +266,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 iconColor: Colors.white54,
                 collapsedIconColor: Colors.white54,
                 title: Text(
-                  'Read full legal text',
+                  'Read full disclaimer text',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.74),
                     fontSize: 13,
@@ -277,7 +277,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Text(
-                      btcsLegalDisclaimerText,
+                      btcsDisclaimerText,
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.65),
                         fontSize: 12,
@@ -336,7 +336,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               checkColor: Colors.white,
               controlAffinity: ListTileControlAffinity.leading,
               title: Text(
-                'I have read and agree to the legal disclaimer and understand my responsibility to secure my seed phrase and WIF.',
+                'I have read and agree to the disclaimer and understand my responsibility to secure my seed phrase and WIF.',
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.9),
                   fontSize: 13,

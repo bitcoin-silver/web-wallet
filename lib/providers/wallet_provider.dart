@@ -684,7 +684,7 @@ class WalletProvider with ChangeNotifier {
     _isLoadingTxs = false;
     _localPendingTxs.clear();
     _storage.clearSession();
-    _storage.clearLegalDisclaimerAccepted();
+    _storage.clearDisclaimerAccepted();
     if (!_rememberSessionEnabled) {
       _storage.clearPersistentSession();
     }
