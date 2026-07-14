@@ -77,7 +77,7 @@ import 'package:bip32/bip32.dart' as bip32;
         
         // Sign using BIP32's optimized, web-safe internal engine
         final Uint8List rawSig = node.sign(txHash);
-        final Uint8List derSig = _encodeDer(rawSig);
+        final Uint8List derSig = _normalizeToDer(rawSig);
         
         final Uint8List sigWithHashType = Uint8List(derSig.length + 1);
         sigWithHashType.setRange(0, derSig.length, derSig);
@@ -251,6 +251,22 @@ import 'package:bip32/bip32.dart' as bip32;
     builder.writeByte(sBytes.length);
     builder.writeBytes(sBytes);
     return builder.toBytes();
+  }
+
+  static Uint8List _normalizeToDer(Uint8List signature) {
+    // Some engines return 64-byte compact signatures (r||s), while others
+    // return ASN.1 DER directly. Accept both to keep signing stable.
+    if (signature.length == 64) {
+      return _encodeDer(signature);
+    }
+
+    if (signature.length > 8 && signature[0] == 0x30) {
+      return signature;
+    }
+
+    throw Exception(
+      'Unexpected signature format (length=${signature.length}).',
+    );
   }
 
   static Uint8List _minimalEncoding(Uint8List bytes) {
