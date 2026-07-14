@@ -8,6 +8,7 @@ import '../config.dart';
 class WalletProvider with ChangeNotifier {
   final WalletService _walletService = WalletService();
   final StorageService _storage = StorageService();
+  static const bool _enableFeeDebugLogs = true;
   static const Duration _rememberSessionTtl = Duration(days: 7);
   static const int _maxMigrationSweepInputs = 120;
   static const int _maxMigrationSweepVbytes = 90000;
@@ -44,6 +45,10 @@ class WalletProvider with ChangeNotifier {
   bool _isFetchingFeeRate = false;
   bool _feeRateReady = false;
   bool _usingManualFeeRate = false;
+  String _feeRateSource = 'unavailable';
+  double? _feeBaselineRate;
+  double? _feeEstimatedRate;
+  double? _feeSanityCeiling;
   String _feeRateStatusMessage = 'Fee estimate not requested yet.';
   // Coin control state
   List<Map<String, dynamic>> _availableUtxos = [];
@@ -56,8 +61,13 @@ class WalletProvider with ChangeNotifier {
   Set<String> get selectedUtxoKeys => _selectedUtxoKeys;
   bool get isLoadingUtxos => _isLoadingUtxos;
   bool get isFetchingFeeRate => _isFetchingFeeRate;
+  double get feeRate => _feeRate;
   bool get feeRateReady => _feeRateReady;
   bool get usingManualFeeRate => _usingManualFeeRate;
+  String get feeRateSource => _feeRateSource;
+  double? get feeBaselineRate => _feeBaselineRate;
+  double? get feeEstimatedRate => _feeEstimatedRate;
+  double? get feeSanityCeiling => _feeSanityCeiling;
   String get feeRateStatusMessage => _feeRateStatusMessage;
   int get utxoPage => _utxoPage;
   int get utxoPageCount => (_availableUtxos.isEmpty) ? 1 : (_availableUtxos.length / _utxosPerPage).ceil();
@@ -95,6 +105,10 @@ class WalletProvider with ChangeNotifier {
     _isFetchingFeeRate = true;
     _feeRateReady = false;
     _usingManualFeeRate = false;
+    _feeRateSource = 'fetching';
+    _feeBaselineRate = null;
+    _feeEstimatedRate = null;
+    _feeSanityCeiling = null;
     _feeRateStatusMessage = 'Fetching fee estimate from node...';
     notifyListeners();
 
@@ -107,16 +121,55 @@ class WalletProvider with ChangeNotifier {
       if (feeResult['success'] == true) {
         _feeRate = (feeResult['feeRate'] as num).toDouble();
         _feeRateReady = true;
-        _feeRateStatusMessage = 'Fee estimate ready from node.';
+        _feeRateSource = (feeResult['source'] as String?) ?? 'estimated';
+        _feeBaselineRate = (feeResult['baselineFeeRate'] as num?)?.toDouble();
+        _feeEstimatedRate = (feeResult['estimatedFeeRate'] as num?)?.toDouble();
+        _feeSanityCeiling = (feeResult['sanityCeiling'] as num?)?.toDouble();
+        switch (_feeRateSource) {
+          case 'clamped':
+            if (_enableFeeDebugLogs) {
+              debugPrint(
+                '[fee] clamped estimator -> baseline '
+                'est=${_feeEstimatedRate?.toStringAsFixed(8)} '
+                'base=${_feeBaselineRate?.toStringAsFixed(8)} '
+                'ceil=${_feeSanityCeiling?.toStringAsFixed(8)}',
+              );
+            }
+            _feeRateStatusMessage =
+                (feeResult['message'] as String?) ??
+                'Smart fee outlier detected. Using node baseline fee.';
+            break;
+          case 'baseline':
+            _feeRateStatusMessage =
+                (feeResult['message'] as String?) ??
+                'Using node baseline fee.';
+            break;
+          case 'manual':
+            _feeRateStatusMessage =
+                'Using manual fee rate (${_feeRate.toStringAsFixed(8)} BTCS/kvB).';
+            break;
+          case 'estimated':
+          default:
+            _feeRateStatusMessage = 'Fee estimate ready from node.';
+            break;
+        }
       } else {
         _feeRate = 0.0;
         _feeRateReady = false;
+        _feeRateSource = 'unavailable';
+        _feeBaselineRate = null;
+        _feeEstimatedRate = null;
+        _feeSanityCeiling = null;
         _feeRateStatusMessage =
             (feeResult['message'] as String?) ?? 'Fee estimation unavailable. Manual fee required.';
       }
     } catch (_) {
       _feeRate = 0.0;
       _feeRateReady = false;
+      _feeRateSource = 'unavailable';
+      _feeBaselineRate = null;
+      _feeEstimatedRate = null;
+      _feeSanityCeiling = null;
       _feeRateStatusMessage = 'Fee estimation unavailable. Enter a manual fee when sending.';
     } finally {
       _isFetchingFeeRate = false;
@@ -128,8 +181,12 @@ class WalletProvider with ChangeNotifier {
     _feeRate = feeRateCoinPerKb;
     _feeRateReady = true;
     _usingManualFeeRate = true;
+    _feeRateSource = 'manual';
+    _feeBaselineRate = null;
+    _feeEstimatedRate = null;
+    _feeSanityCeiling = null;
     _feeRateStatusMessage =
-        'Using manual fee rate (${feeRateCoinPerKb.toStringAsFixed(8)} BTCS/kB).';
+        'Using manual fee rate (${feeRateCoinPerKb.toStringAsFixed(8)} BTCS/kvB).';
     notifyListeners();
   }
 
@@ -899,6 +956,21 @@ class WalletProvider with ChangeNotifier {
         _message = '⏳ Sweeping funds to new address...';
         notifyListeners();
 
+        final migrationFeeResolution = await _walletService.resolveFeeRate(
+          _rpcUrl,
+          _rpcUser,
+          _rpcPassword,
+        );
+        if (migrationFeeResolution['success'] != true) {
+          _isLoading = false;
+          _message = '❌ Migration failed: could not establish a safe fee rate.';
+          notifyListeners();
+          return false;
+        }
+
+        final migrationFeeRate =
+            (migrationFeeResolution['feeRate'] as num).toDouble();
+
         final result = await _walletService.sendTransaction(
           _rpcUrl,
           _rpcUser,
@@ -907,6 +979,7 @@ class WalletProvider with ChangeNotifier {
           oldAddress,
           newAddress,
           currentBalance,
+          manualFeeRateCoinPerKb: migrationFeeRate,
         );
 
         if (!result['success']) {

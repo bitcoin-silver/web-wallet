@@ -2,7 +2,7 @@
 
 ## Introduction
 
-A modern, secure, non-custodial, client-side signing wallet for the Bitcoin Silver network. This version introduces significant architectural improvements, seed phrase support, and a built-in migration tool.
+A modern, secure, non-custodial, client-side signing wallet for the Bitcoin Silver network.
 
 <p align="center">
   <img src="assets/logo.png" alt="BitcoinSilver Web-Wallet" width="600">
@@ -17,6 +17,27 @@ A modern, secure, non-custodial, client-side signing wallet for the Bitcoin Silv
   <a href="https://bitcoinsilver.top">Website</a> •
   <a href="https://explorer.bitcoinsilver.top">Explorer</a>
 </p>
+
+## 🚀 What's New in v2.7
+
+### 💸 Safer Fee Estimation (Live-Network Ready)
+
+- **Smart Fee Sanity Guard**: `estimatesmartfee` values are now validated against node policy baseline fees.
+- **Baseline Fallback**: If smart fee is missing/unusable, wallet falls back automatically to a safe baseline derived from `relayfee`, `incrementalfee`, and `mempoolminfee`.
+- **Outlier Clamp**: Extreme estimator spikes are clamped to baseline to prevent accidental overpay.
+
+### 🧭 Better Send Controls
+
+- **Always-Available Manual Fee**: Users can set manual fee even when node fee is available.
+- **Quick Revert to Node Fee**: One-click switch back from manual fee to node-driven fee mode.
+- **Send Preview Improvements**: Transaction preview shows selected inputs, amount, estimated fee, fee source, fee rate, and expected change.
+
+### 🔄 Migration Send Path Hardening
+
+- **Deterministic Fee for Migration Sweep**: Migration now resolves fee first, then sends using that exact resolved value.
+- **Same Improved Fee Logic**: Migration uses the same clamped smart-fee + baseline fallback safety path as normal send.
+
+---
 
 ## 🚀 What's New in v2.6
 

@@ -345,6 +345,56 @@ class WalletService {
   }
 
   // Send transaction
+  double? _parsePositiveFeeRate(dynamic raw) {
+    final num? parsed = raw is num ? raw : num.tryParse(raw?.toString() ?? '');
+    final value = parsed?.toDouble();
+    if (value == null || value <= 0) return null;
+    return value;
+  }
+
+  Future<double> _resolveNodeBaselineFee(
+    String rpcUrl,
+    String rpcUser,
+    String rpcPassword,
+  ) async {
+    const hardFloor = 0.00001;
+    double relayFee = hardFloor;
+    double incrementalFee = hardFloor;
+    double mempoolMinFee = hardFloor;
+
+    try {
+      final netInfo = await rpcRequest(
+        rpcUrl,
+        rpcUser,
+        rpcPassword,
+        'getnetworkinfo',
+      );
+      final relay = _parsePositiveFeeRate(netInfo?['result']?['relayfee']);
+      final incremental =
+          _parsePositiveFeeRate(netInfo?['result']?['incrementalfee']);
+      if (relay != null) relayFee = relay;
+      if (incremental != null) incrementalFee = incremental;
+    } catch (_) {
+      // Keep defaults when node/network info is unavailable.
+    }
+
+    try {
+      final mempoolInfo = await rpcRequest(
+        rpcUrl,
+        rpcUser,
+        rpcPassword,
+        'getmempoolinfo',
+      );
+      final mempoolMin =
+          _parsePositiveFeeRate(mempoolInfo?['result']?['mempoolminfee']);
+      if (mempoolMin != null) mempoolMinFee = mempoolMin;
+    } catch (_) {
+      // Keep defaults when mempool info is unavailable.
+    }
+
+    return max(hardFloor, max(relayFee, max(incrementalFee, mempoolMinFee)));
+  }
+
   Future<Map<String, dynamic>> resolveFeeRate(
     String rpcUrl,
     String rpcUser,
@@ -367,6 +417,11 @@ class WalletService {
     }
 
     try {
+      final baselineFeeRate = await _resolveNodeBaselineFee(
+        rpcUrl,
+        rpcUser,
+        rpcPassword,
+      );
       final response = await rpcRequest(
         rpcUrl,
         rpcUser,
@@ -377,34 +432,60 @@ class WalletService {
 
       if (response?['error'] != null) {
         return {
-          'success': false,
-          'message': 'Node failed to estimate fee. Please enter a manual fee rate on send.',
-          'reason': 'rpc-error',
+          'success': true,
+          'feeRate': baselineFeeRate,
+          'baselineFeeRate': baselineFeeRate,
+          'source': 'baseline',
+          'message': 'Smart fee unavailable. Using node baseline fee.',
         };
       }
 
-      final dynamic rawFeeRate = response?['result']?['feerate'];
-      final num? parsed = rawFeeRate is num ? rawFeeRate : num.tryParse(rawFeeRate?.toString() ?? '');
-      final double? feeRate = parsed?.toDouble();
+      final double? feeRate =
+          _parsePositiveFeeRate(response?['result']?['feerate']);
 
       if (feeRate == null || feeRate <= 0) {
         return {
-          'success': false,
-          'message': 'Node could not estimate a network fee at this time. Enter a manual fee rate on send.',
-          'reason': 'no-estimate',
+          'success': true,
+          'feeRate': baselineFeeRate,
+          'baselineFeeRate': baselineFeeRate,
+          'source': 'baseline',
+          'message': 'Estimator returned no usable value. Using node baseline fee.',
+        };
+      }
+
+      final sanityCeiling = baselineFeeRate * 50;
+      if (feeRate > sanityCeiling) {
+        return {
+          'success': true,
+          'feeRate': baselineFeeRate,
+          'baselineFeeRate': baselineFeeRate,
+          'estimatedFeeRate': feeRate,
+          'sanityCeiling': sanityCeiling,
+          'source': 'clamped',
+          'message':
+              'Estimator outlier (${feeRate.toStringAsFixed(8)} BTCS/kvB). '
+              'Using baseline ${baselineFeeRate.toStringAsFixed(8)} BTCS/kvB.',
         };
       }
 
       return {
         'success': true,
         'feeRate': feeRate,
+        'baselineFeeRate': baselineFeeRate,
         'source': 'estimated',
       };
     } catch (_) {
+      final baselineFeeRate = await _resolveNodeBaselineFee(
+        rpcUrl,
+        rpcUser,
+        rpcPassword,
+      );
       return {
-        'success': false,
-        'message': 'Fee estimation request failed. Enter a manual fee rate on send.',
-        'reason': 'request-failed',
+        'success': true,
+        'feeRate': baselineFeeRate,
+        'baselineFeeRate': baselineFeeRate,
+        'source': 'baseline',
+        'message': 'Fee estimation request failed. Using node baseline fee.',
       };
     }
   }

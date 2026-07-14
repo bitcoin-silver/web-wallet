@@ -88,6 +88,8 @@ class SparklinePainter extends CustomPainter {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProviderStateMixin {
+  static const int _satsPerBtcs = 100000000;
+
   late TabController _tabController;
   final TextEditingController _toController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
@@ -99,6 +101,40 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   bool? _addressValid; // null=unchecked/unknown, true=valid, false=invalid
   bool _isValidatingAddress = false;
   Timer? _addressDebounce;
+
+  int _btcsToSats(double amount) => (amount * _satsPerBtcs).round();
+  double _satsToBtcs(int sats) => sats / _satsPerBtcs;
+  double _btcsKvBToSatVb(double btcsKvB) => btcsKvB / 0.00001;
+
+  String _feeSourceLabel(WalletProvider provider) {
+    switch (provider.feeRateSource) {
+      case 'manual':
+        return 'Manual';
+      case 'clamped':
+        return 'Clamped to Baseline';
+      case 'baseline':
+        return 'Node Baseline';
+      case 'estimated':
+        return 'Node Estimate';
+      default:
+        return 'Not Ready';
+    }
+  }
+
+  Color _feeSourceColor(WalletProvider provider) {
+    switch (provider.feeRateSource) {
+      case 'manual':
+        return Colors.amberAccent;
+      case 'clamped':
+        return Colors.orangeAccent;
+      case 'baseline':
+        return Colors.lightBlueAccent;
+      case 'estimated':
+        return Colors.greenAccent;
+      default:
+        return Colors.orangeAccent;
+    }
+  }
 
   @override
   void initState() {
@@ -1220,43 +1256,36 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                 ),
               ),
 
-              // Fee estimate (both modes)
-              Consumer<WalletProvider>(
-                builder: (context, provider, _) {
-                  final fee = _advancedSend && provider.selectedUtxoCount > 0
-                      ? provider.estimatedFee
-                      : provider.estimatedSimpleFee;
-                  if (provider.isFetchingFeeRate) {
-                    return const Padding(
-                      padding: EdgeInsets.only(top: 6, left: 4),
-                      child: Text(
-                        'Fetching fee estimate...',
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
-                      ),
-                    );
-                  }
-                  final label = _advancedSend && provider.selectedUtxoCount > 0
-                      ? 'Est. fee'
-                      : 'Est. fee (typical tx)';
-                  if (fee <= 0) return const SizedBox.shrink();
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 6, left: 4),
-                    child: Text(
-                      '${provider.usingManualFeeRate ? 'Manual ' : ''}$label: ${fee.toStringAsFixed(8)} BTCS',
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                  );
-                },
+              const SizedBox(height: 12),
+              _buildFeeEstimate(provider),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  OutlinedButton(
+                    onPressed: provider.isLoading
+                        ? null
+                        : () async {
+                            final manualFeeRate = await _showManualFeeDialog(context);
+                            if (manualFeeRate != null) {
+                              provider.setManualFeeRate(manualFeeRate);
+                            }
+                          },
+                    child: const Text('Set Manual Fee'),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: provider.isFetchingFeeRate ? null : () => provider.fetchFeeRate(),
+                    child: const Text('Use Node Fee'),
+                  ),
+                ],
               ),
 
               if (_advancedSend) ...[
                 const SizedBox(height: 32),
                 _buildUtxoSelector(provider),
               ],
-              if (_advancedSend && provider.selectedUtxoCount > 0) ...[
-                const SizedBox(height: 16),
-                _buildFeeEstimate(provider),
-              ],
+              const SizedBox(height: 12),
+              _buildSendPreview(provider),
               const SizedBox(height: 40),
 
               ElevatedButton(
@@ -1267,12 +1296,30 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                       || _addressValid == false                
                       ? null
                       : () async {
-                          provider.clearMessage();            
+                          provider.clearMessage();
                           final amount = double.tryParse(_amountController.text);
                           if (amount != null) {
+                            // Keep send fee path identical to preview: use fetched rate when
+                            // available, otherwise ask for manual fee before broadcast.
+                            double? feeRateCoinPerKvB;
+                            if (provider.feeRateReady) {
+                              feeRateCoinPerKvB = provider.feeRate;
+                            } else {
+                              await provider.fetchFeeRate();
+                              if (provider.feeRateReady) {
+                                feeRateCoinPerKvB = provider.feeRate;
+                              } else if (mounted) {
+                                final manualFeeRate = await _showManualFeeDialog(context);
+                                if (manualFeeRate == null) return;
+                                provider.setManualFeeRate(manualFeeRate);
+                                feeRateCoinPerKvB = manualFeeRate;
+                              }
+                            }
+
                             final result = await provider.sendTransaction(
                               _toController.text.trim(),
                               amount,
+                              manualFeeRateCoinPerKb: feeRateCoinPerKvB,
                             );
 
                             if (result['success'] != true && result['requiresManualFee'] == true && mounted) {
@@ -1380,7 +1427,15 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   Future<double?> _showManualFeeDialog(BuildContext context) async {
     final controller = TextEditingController();
     String? error;
-    bool satPerByte = true;
+    bool satPerVb = true;
+
+    const lowBtcsKvB = 0.085;
+    const highBtcsKvB = 0.10;
+    const satVbToBtcsKvB = 0.00001;
+    final lowSatVb = lowBtcsKvB / satVbToBtcsKvB;
+    final highSatVb = highBtcsKvB / satVbToBtcsKvB;
+
+    controller.text = lowSatVb.toStringAsFixed(2);
 
     final result = await showDialog<double>(
       context: context,
@@ -1399,10 +1454,20 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                   ),
                   const SizedBox(height: 12),
                   ToggleButtons(
-                    isSelected: [satPerByte, !satPerByte],
+                    isSelected: [satPerVb, !satPerVb],
                     onPressed: (index) {
                       setDialogState(() {
-                        satPerByte = index == 0;
+                        final nextSatVb = index == 0;
+                        final parsed = double.tryParse(controller.text.trim());
+                        if (parsed != null && parsed > 0 && nextSatVb != satPerVb) {
+                          final converted = nextSatVb
+                              ? parsed / satVbToBtcsKvB
+                              : parsed * satVbToBtcsKvB;
+                          controller.text = nextSatVb
+                              ? converted.toStringAsFixed(2)
+                              : converted.toStringAsFixed(8);
+                        }
+                        satPerVb = nextSatVb;
                         error = null;
                       });
                     },
@@ -1410,18 +1475,22 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                     children: const [
                       Padding(
                         padding: EdgeInsets.symmetric(horizontal: 12),
-                        child: Text('sat/byte'),
+                        child: Text('sat/vB'),
                       ),
                       Padding(
                         padding: EdgeInsets.symmetric(horizontal: 12),
-                        child: Text('BTCS/kB'),
+                        child: Text('BTCS/kvB'),
                       ),
                     ],
                   ),
                   const SizedBox(height: 10),
-                  const Text(
-                    'Quick network presets (sat/byte):',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  Text(
+                    'Low traffic: ${lowSatVb.toStringAsFixed(0)} sat/vB (${lowBtcsKvB.toStringAsFixed(8)} BTCS/kvB)',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  Text(
+                    'High traffic: ${highSatVb.toStringAsFixed(0)} sat/vB (${highBtcsKvB.toStringAsFixed(8)} BTCS/kvB)',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                   const SizedBox(height: 8),
                   Row(
@@ -1429,23 +1498,25 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                       OutlinedButton(
                         onPressed: () {
                           setDialogState(() {
-                            satPerByte = true;
-                            controller.text = '0.10';
+                            controller.text = satPerVb
+                                ? lowSatVb.toStringAsFixed(2)
+                                : lowBtcsKvB.toStringAsFixed(8);
                             error = null;
                           });
                         },
-                        child: const Text('High (0.10)'),
+                        child: const Text('Use Low'),
                       ),
                       const SizedBox(width: 8),
                       OutlinedButton(
                         onPressed: () {
                           setDialogState(() {
-                            satPerByte = true;
-                            controller.text = '0.09';
+                            controller.text = satPerVb
+                                ? highSatVb.toStringAsFixed(2)
+                                : highBtcsKvB.toStringAsFixed(8);
                             error = null;
                           });
                         },
-                        child: const Text('Low (0.09)'),
+                        child: const Text('Use High'),
                       ),
                     ],
                   ),
@@ -1454,8 +1525,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                     controller: controller,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     decoration: InputDecoration(
-                      labelText: satPerByte ? 'Fee rate (sat/byte)' : 'Fee rate (BTCS/kB)',
-                      hintText: satPerByte ? 'e.g. 2.0' : 'e.g. 0.00002000',
+                      labelText: satPerVb ? 'Fee rate (sat/vB)' : 'Fee rate (BTCS/kvB)',
+                      hintText: satPerVb ? 'e.g. 8500.00' : 'e.g. 0.08500000',
                       errorText: error,
                     ),
                   ),
@@ -1476,7 +1547,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                       return;
                     }
 
-                    final feeRateCoinPerKb = satPerByte ? (raw * 0.00001) : raw;
+                    final feeRateCoinPerKb = satPerVb ? (raw * satVbToBtcsKvB) : raw;
                     if (feeRateCoinPerKb <= 0) {
                       setDialogState(() {
                         error = 'Converted fee rate is invalid.';
@@ -1681,6 +1752,26 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   }
 
   Widget _buildFeeEstimate(WalletProvider provider) {
+    final hasSelectedInputs = _advancedSend && provider.selectedUtxoCount > 0;
+    final fee = hasSelectedInputs ? provider.estimatedFee : provider.estimatedSimpleFee;
+    final label = hasSelectedInputs ? 'Est. fee' : 'Est. fee (typical tx)';
+
+    if (provider.isFetchingFeeRate) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 6, left: 4),
+        child: Text(
+          'Fetching fee estimate...',
+          style: TextStyle(fontSize: 12, color: Colors.grey),
+        ),
+      );
+    }
+
+    if (fee <= 0) return const SizedBox.shrink();
+
+    final feeRate = provider.feeRate;
+    final feeRateSatVb = _btcsKvBToSatVb(feeRate);
+    final feeSource = _feeSourceLabel(provider);
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -1688,33 +1779,146 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Est. fee', style: TextStyle(fontSize: 11, color: Colors.grey)),
-              const SizedBox(height: 2),
+              Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
               Text(
-                '${provider.estimatedFee.toStringAsFixed(8)} BTCS',
-                style: const TextStyle(fontSize: 13),
+                '$feeSource source',
+                style: const TextStyle(fontSize: 11, color: Colors.grey),
               ),
             ],
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          const SizedBox(height: 2),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Net send', style: TextStyle(fontSize: 11, color: Colors.grey)),
-              const SizedBox(height: 2),
               Text(
-                provider.estimatedNetSend > 0
-                    ? '${provider.estimatedNetSend.toStringAsFixed(8)} BTCS'
-                    : '—',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: provider.estimatedNetSend > 0 ? Colors.white : Colors.red,
+                '${fee.toStringAsFixed(8)} BTCS',
+                style: const TextStyle(fontSize: 13),
+              ),
+              if (hasSelectedInputs)
+                Text(
+                  provider.estimatedNetSend > 0
+                      ? 'Net ${provider.estimatedNetSend.toStringAsFixed(8)} BTCS'
+                      : 'Net —',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: provider.estimatedNetSend > 0 ? Colors.white : Colors.red,
+                  ),
                 ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Rate: ${feeRate.toStringAsFixed(8)} BTCS/kvB (${feeRateSatVb.toStringAsFixed(2)} sat/vB)',
+            style: const TextStyle(fontSize: 11, color: Colors.grey),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSendPreview(WalletProvider provider) {
+    final amount = double.tryParse(_amountController.text.trim()) ?? 0.0;
+    if (amount <= 0) return const SizedBox.shrink();
+
+    final hasSelectedInputs = _advancedSend && provider.selectedUtxoCount > 0;
+    final fee = hasSelectedInputs ? provider.estimatedFee : provider.estimatedSimpleFee;
+
+    final selectedInputsSats = hasSelectedInputs ? _btcsToSats(provider.selectedUtxoTotal) : 0;
+    final autoSpendableSats = _btcsToSats(provider.wallet?.balance ?? 0.0);
+    final amountSats = _btcsToSats(amount);
+    final feeSats = _btcsToSats(fee);
+    final expectedChangeSats = hasSelectedInputs
+        ? (selectedInputsSats - amountSats - feeSats)
+        : (autoSpendableSats - amountSats - feeSats);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Transaction Preview',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Selected Inputs', style: TextStyle(color: Colors.white60, fontSize: 12)),
+              Text(
+                hasSelectedInputs
+                    ? '${_satsToBtcs(selectedInputsSats).toStringAsFixed(8)} BTCS'
+                    : 'Auto',
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Send Amount', style: TextStyle(color: Colors.white60, fontSize: 12)),
+              Text(
+                '${_satsToBtcs(amountSats).toStringAsFixed(8)} BTCS',
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Estimated Fee', style: TextStyle(color: Colors.white60, fontSize: 12)),
+              Text(
+                '${_satsToBtcs(feeSats).toStringAsFixed(8)} BTCS',
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Fee Source', style: TextStyle(color: Colors.white60, fontSize: 12)),
+              Text(
+                _feeSourceLabel(provider),
+                style: TextStyle(
+                  color: _feeSourceColor(provider),
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Fee Rate', style: TextStyle(color: Colors.white60, fontSize: 12)),
+              Text(
+                '${provider.feeRate.toStringAsFixed(8)} BTCS/kvB (${_btcsKvBToSatVb(provider.feeRate).toStringAsFixed(2)} sat/vB)',
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Expected Change', style: TextStyle(color: Colors.white60, fontSize: 12)),
+              Text(
+                '${_satsToBtcs(expectedChangeSats > 0 ? expectedChangeSats : 0).toStringAsFixed(8)} BTCS',
+                style: const TextStyle(color: Colors.white, fontSize: 12),
               ),
             ],
           ),
@@ -1850,7 +2054,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         const SizedBox(height: 10),
         const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Text('BTCS Web-Wallet version 2.6', 
+              child: Text('BTCS Web-Wallet version 2.7', 
               style: TextStyle(color: Colors.white54, fontSize: 12),
               textAlign: TextAlign.center
         ),      

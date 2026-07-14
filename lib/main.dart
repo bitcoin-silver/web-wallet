@@ -22,7 +22,7 @@ class BTCSWebWallet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'BTCS Web Wallet',
+      title: 'BTCS Web-Wallet',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
       home: Consumer<WalletProvider>(
