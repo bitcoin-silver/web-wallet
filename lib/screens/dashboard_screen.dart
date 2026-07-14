@@ -1241,6 +1241,14 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               TextField(
                 controller: _amountController,
                 keyboardType: TextInputType.number,
+                inputFormatters: [
+                  TextInputFormatter.withFunction((oldValue, newValue) {
+                    final text = newValue.text;
+                    if (text.isEmpty) return newValue;
+                    final valid = RegExp(r'^\d*\.?\d{0,8}$').hasMatch(text);
+                    return valid ? newValue : oldValue;
+                  }),
+                ],
                 decoration: InputDecoration(
                   labelText: 'Amount (BTCS)',
                   hintText: '0.00000000',
