@@ -106,6 +106,15 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   double _satsToBtcs(int sats) => sats / _satsPerBtcs;
   double _btcsKvBToSatVb(double btcsKvB) => btcsKvB / 0.00001;
 
+  String _formatDecimal(double value, {int maxDecimals = 8}) {
+    final fixed = value.toStringAsFixed(maxDecimals);
+    final trimmed = fixed.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
+    return trimmed.isEmpty ? '0' : trimmed;
+  }
+
+  String _formatSatVb(double btcsKvB) =>
+      _formatDecimal(_btcsKvBToSatVb(btcsKvB), maxDecimals: 6);
+
   String _feeSourceLabel(WalletProvider provider) {
     switch (provider.feeRateSource) {
       case 'manual':
@@ -1632,7 +1641,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               const SizedBox(height: 4),
               Text(
                 'Fee rate: ${provider.feeRate.toStringAsFixed(8)} BTCS/kvB '
-                '(${_btcsKvBToSatVb(provider.feeRate).toStringAsFixed(2)} sat/vB)',
+                '(${_formatSatVb(provider.feeRate)} sat/vB)',
               ),
               if (hasSelectedInputs) ...[
                 const SizedBox(height: 4),
@@ -1897,7 +1906,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     if (fee <= 0) return const SizedBox.shrink();
 
     final feeRate = provider.feeRate;
-    final feeRateSatVb = _btcsKvBToSatVb(feeRate);
+    final feeRateSatVb = _formatSatVb(feeRate);
     final feeSource = _feeSourceLabel(provider);
 
     return Container(
@@ -1942,7 +1951,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           ),
           const SizedBox(height: 6),
           Text(
-            'Rate: ${feeRate.toStringAsFixed(8)} BTCS/kvB (${feeRateSatVb.toStringAsFixed(2)} sat/vB)',
+            'Rate: ${feeRate.toStringAsFixed(8)} BTCS/kvB ($feeRateSatVb sat/vB)',
             style: const TextStyle(fontSize: 11, color: Colors.grey),
           ),
         ],
@@ -2034,7 +2043,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             children: [
               const Text('Fee Rate', style: TextStyle(color: Colors.white60, fontSize: 12)),
               Text(
-                '${provider.feeRate.toStringAsFixed(8)} BTCS/kvB (${_btcsKvBToSatVb(provider.feeRate).toStringAsFixed(2)} sat/vB)',
+                '${provider.feeRate.toStringAsFixed(8)} BTCS/kvB (${_formatSatVb(provider.feeRate)} sat/vB)',
                 style: const TextStyle(color: Colors.white, fontSize: 12),
               ),
             ],
