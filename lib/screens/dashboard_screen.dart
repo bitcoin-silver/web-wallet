@@ -1455,7 +1455,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     final lowSatVb = lowBtcsKvB / satVbToBtcsKvB;
     final highSatVb = highBtcsKvB / satVbToBtcsKvB;
 
-    controller.text = lowSatVb.toStringAsFixed(2);
+    controller.text = lowSatVb.toStringAsFixed(4);
 
     final result = await showDialog<double>(
       context: context,
@@ -1484,7 +1484,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                               ? parsed / satVbToBtcsKvB
                               : parsed * satVbToBtcsKvB;
                           controller.text = nextSatVb
-                              ? converted.toStringAsFixed(2)
+                              ? converted.toStringAsFixed(4)
                               : converted.toStringAsFixed(8);
                         }
                         satPerVb = nextSatVb;
@@ -1519,7 +1519,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                         onPressed: () {
                           setDialogState(() {
                             controller.text = satPerVb
-                                ? lowSatVb.toStringAsFixed(3)
+                              ? lowSatVb.toStringAsFixed(4)
                                 : lowBtcsKvB.toStringAsFixed(8);
                             error = null;
                           });
@@ -1531,7 +1531,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                         onPressed: () {
                           setDialogState(() {
                             controller.text = satPerVb
-                                ? highSatVb.toStringAsFixed(3)
+                              ? highSatVb.toStringAsFixed(4)
                                 : highBtcsKvB.toStringAsFixed(8);
                             error = null;
                           });
@@ -1547,7 +1547,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                     decoration: InputDecoration(
                       labelText: satPerVb ? 'Fee rate (sat/vB)' : 'Fee rate (BTCS/kvB)',
                       hintText: satPerVb
-                          ? 'e.g. ${lowSatVb.toStringAsFixed(3)}'
+                          ? 'e.g. ${lowSatVb.toStringAsFixed(4)}'
                           : 'e.g. ${lowBtcsKvB.toStringAsFixed(8)}',
                       errorText: error,
                     ),
@@ -1579,7 +1579,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
 
                     Navigator.pop(dialogContext, feeRateCoinPerKb);
                   },
-                  child: const Text('Use Fee & Send'),
+                  child: const Text('Use Fee Rate'),
                 ),
               ],
             );
