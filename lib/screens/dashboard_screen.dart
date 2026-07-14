@@ -1316,6 +1316,14 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                               }
                             }
 
+                            final preConfirm = await _showPreSendConfirmDialog(
+                              context: context,
+                              provider: provider,
+                              toAddress: _toController.text.trim(),
+                              amount: amount,
+                            );
+                            if (!preConfirm) return;
+
                             final result = await provider.sendTransaction(
                               _toController.text.trim(),
                               amount,
@@ -1332,26 +1340,30 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                                   manualFeeRateCoinPerKb: manualFeeRate,
                                 );
                                 if (retryResult['success'] == true) {
-                                  _toController.clear();
-                                  _amountController.clear();
-                                  setState(() {
-                                    _addressValid = null;
-                                    if (_advancedSend) _advancedSend = false;
-                                  });
-                                  provider.resetCoinControl();
+                                  _resetSendForm(provider);
+                                  if (mounted) {
+                                    await _showPostSendAckDialog(
+                                      context: context,
+                                      txid: (retryResult['txid'] as String?) ?? '',
+                                      amount: amount,
+                                      fee: (retryResult['fee'] as num?)?.toDouble() ?? 0.0,
+                                    );
+                                  }
                                 }
                               }
                               return;
                             }
 
                             if (result['success'] == true) {
-                              _toController.clear();
-                              _amountController.clear();
-                              setState(() {
-                                _addressValid = null;
-                                if (_advancedSend) _advancedSend = false;
-                              });
-                              provider.resetCoinControl();
+                              _resetSendForm(provider);
+                              if (mounted) {
+                                await _showPostSendAckDialog(
+                                  context: context,
+                                  txid: (result['txid'] as String?) ?? '',
+                                  amount: amount,
+                                  fee: (result['fee'] as num?)?.toDouble() ?? 0.0,
+                                );
+                              }
                             }
                           }
                         },
@@ -1429,8 +1441,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     String? error;
     bool satPerVb = true;
 
-    const lowBtcsKvB = 0.085;
-    const highBtcsKvB = 0.10;
+    const lowBtcsKvB = 0.00000226;
+    const highBtcsKvB = 0.0004;
     const satVbToBtcsKvB = 0.00001;
     final lowSatVb = lowBtcsKvB / satVbToBtcsKvB;
     final highSatVb = highBtcsKvB / satVbToBtcsKvB;
@@ -1485,11 +1497,11 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    'Low traffic: ${lowSatVb.toStringAsFixed(0)} sat/vB (${lowBtcsKvB.toStringAsFixed(8)} BTCS/kvB)',
+                    'Low traffic: ${lowSatVb.toStringAsFixed(3)} sat/vB (${lowBtcsKvB.toStringAsFixed(8)} BTCS/kvB)',
                     style: const TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                   Text(
-                    'High traffic: ${highSatVb.toStringAsFixed(0)} sat/vB (${highBtcsKvB.toStringAsFixed(8)} BTCS/kvB)',
+                    'High traffic: ${highSatVb.toStringAsFixed(2)} sat/vB (${highBtcsKvB.toStringAsFixed(8)} BTCS/kvB)',
                     style: const TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                   const SizedBox(height: 8),
@@ -1526,7 +1538,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     decoration: InputDecoration(
                       labelText: satPerVb ? 'Fee rate (sat/vB)' : 'Fee rate (BTCS/kvB)',
-                      hintText: satPerVb ? 'e.g. 8500.00' : 'e.g. 0.08500000',
+                      hintText: satPerVb ? 'e.g. 0.23' : 'e.g. 0.00000226',
                       errorText: error,
                     ),
                   ),
@@ -1568,6 +1580,112 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
 
     controller.dispose();
     return result;
+  }
+
+  void _resetSendForm(WalletProvider provider) {
+    _toController.clear();
+    _amountController.clear();
+    setState(() {
+      _addressValid = null;
+      if (_advancedSend) _advancedSend = false;
+    });
+    provider.resetCoinControl();
+  }
+
+  Future<bool> _showPreSendConfirmDialog({
+    required BuildContext context,
+    required WalletProvider provider,
+    required String toAddress,
+    required double amount,
+  }) async {
+    final hasSelectedInputs = _advancedSend && provider.selectedUtxoCount > 0;
+    final estimatedFee = hasSelectedInputs ? provider.estimatedFee : provider.estimatedSimpleFee;
+    final feeSource = _feeSourceLabel(provider);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Confirm Transaction'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('To: $toAddress', style: const TextStyle(fontSize: 12)),
+              const SizedBox(height: 8),
+              Text('Amount: ${amount.toStringAsFixed(8)} BTCS'),
+              const SizedBox(height: 4),
+              Text('Estimated fee: ${estimatedFee.toStringAsFixed(8)} BTCS'),
+              const SizedBox(height: 4),
+              Text('Fee source: $feeSource'),
+              const SizedBox(height: 4),
+              Text(
+                'Fee rate: ${provider.feeRate.toStringAsFixed(8)} BTCS/kvB '
+                '(${_btcsKvBToSatVb(provider.feeRate).toStringAsFixed(2)} sat/vB)',
+              ),
+              if (hasSelectedInputs) ...[
+                const SizedBox(height: 4),
+                Text('Selected inputs: ${provider.selectedUtxoCount}'),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Agree & Send'),
+            ),
+          ],
+        );
+      },
+    );
+
+    return confirmed ?? false;
+  }
+
+  Future<void> _showPostSendAckDialog({
+    required BuildContext context,
+    required String txid,
+    required double amount,
+    required double fee,
+  }) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Transaction Sent'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Amount: ${amount.toStringAsFixed(8)} BTCS'),
+              const SizedBox(height: 4),
+              Text('Fee paid: ${fee.toStringAsFixed(8)} BTCS'),
+              if (txid.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                const Text('TXID:'),
+                const SizedBox(height: 4),
+                SelectableText(
+                  txid,
+                  style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Acknowledge'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Widget _buildUtxoSelector(WalletProvider provider) {
