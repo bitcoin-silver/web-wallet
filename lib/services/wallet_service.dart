@@ -619,24 +619,41 @@ class WalletService {
       if (inputSumSats < neededSats) continue; // Loop until input matches costs
 
       // ── Build BTCSTxInput list ─────────────────────────────────────────
-      final inputs = selectedUtxos.map((u) {
+      final inputs = <BTCSTxInput>[];
+      for (final u in selectedUtxos) {
         String? scriptHex = u['scriptPubKey'] as String?;
-      // Safety Checkpoint: If null or empty, compute it directly from the source address
+        // Safety checkpoint: if missing, compute from source address.
         if (scriptHex == null || scriptHex.isEmpty) {
-          try {
-            final computedScript = BTCSSigner.scriptFromAddress(fromAddress);
-            scriptHex = HEX.encode(computedScript);
-          } catch (e) {
-            scriptHex = ''; 
-          }
+          final computedScript = BTCSSigner.scriptFromAddress(fromAddress);
+          scriptHex = HEX.encode(computedScript);
         }
-        return BTCSTxInput(
-          txid: u['txid'] as String,
-          vout: u['vout'] as int,
-          scriptPubKey: Uint8List.fromList(HEX.decode(scriptHex)),
-          satoshis: toSats((u['amount'] as num).toDouble()),
+
+        Uint8List scriptBytes;
+        try {
+          scriptBytes = Uint8List.fromList(HEX.decode(scriptHex));
+        } catch (_) {
+          return {
+            'success': false,
+            'message': 'Invalid scriptPubKey for input ${u['txid']}:${u['vout']}.',
+          };
+        }
+
+        if (scriptBytes.isEmpty) {
+          return {
+            'success': false,
+            'message': 'Empty scriptPubKey for input ${u['txid']}:${u['vout']}.',
+          };
+        }
+
+        inputs.add(
+          BTCSTxInput(
+            txid: u['txid'] as String,
+            vout: u['vout'] as int,
+            scriptPubKey: scriptBytes,
+            satoshis: toSats((u['amount'] as num).toDouble()),
+          ),
         );
-      }).toList();
+      }
 
       // ── Build BTCSTxOutput list ────────────────────────────────────────
       final outputs = <BTCSTxOutput>[];

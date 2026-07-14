@@ -164,15 +164,7 @@ import 'package:bip32/bip32.dart' as bip32;
     builder.writeBytes(txidBytes);
     builder.writeUint32(input.vout);
 
-    final Uint8List pubKeyHash = input.scriptPubKey.sublist(2); 
-    final scriptCodeBuilder = _BytesBuilder();
-    scriptCodeBuilder.writeByte(0x76); 
-    scriptCodeBuilder.writeByte(0xa9); 
-    scriptCodeBuilder.writeByte(pubKeyHash.length);
-    scriptCodeBuilder.writeBytes(pubKeyHash);
-    scriptCodeBuilder.writeByte(0x88); 
-    scriptCodeBuilder.writeByte(0xac); 
-    final Uint8List scriptCode = scriptCodeBuilder.toBytes();
+    final Uint8List scriptCode = _scriptCodeFromUtxoScript(input.scriptPubKey);
 
     builder.writeVarInt(scriptCode.length);
     builder.writeBytes(scriptCode);
@@ -314,6 +306,37 @@ import 'package:bip32/bip32.dart' as bip32;
   static Uint8List _doubleSha256(Uint8List data) {
     final pass1 = sha256.convert(data).bytes;
     return Uint8List.fromList(sha256.convert(pass1).bytes);
+  }
+
+  static Uint8List _scriptCodeFromUtxoScript(Uint8List scriptPubKey) {
+    // P2WPKH scriptPubKey: 0x00 0x14 <20-byte-hash>
+    if (scriptPubKey.length == 22 &&
+        scriptPubKey[0] == 0x00 &&
+        scriptPubKey[1] == 0x14) {
+      final pubKeyHash = scriptPubKey.sublist(2);
+      final builder = _BytesBuilder();
+      builder.writeByte(0x76);
+      builder.writeByte(0xa9);
+      builder.writeByte(pubKeyHash.length);
+      builder.writeBytes(pubKeyHash);
+      builder.writeByte(0x88);
+      builder.writeByte(0xac);
+      return builder.toBytes();
+    }
+
+    // P2PKH scriptPubKey: OP_DUP OP_HASH160 PUSH20 <20-byte-hash> OP_EQUALVERIFY OP_CHECKSIG
+    if (scriptPubKey.length == 25 &&
+        scriptPubKey[0] == 0x76 &&
+        scriptPubKey[1] == 0xa9 &&
+        scriptPubKey[2] == 0x14 &&
+        scriptPubKey[23] == 0x88 &&
+        scriptPubKey[24] == 0xac) {
+      return scriptPubKey;
+    }
+
+    throw Exception(
+      'Unsupported or malformed input scriptPubKey (len=${scriptPubKey.length}).',
+    );
   }
 
   static Uint8List _convertBits(Uint8List data, int fromBits, int toBits, bool pad) {
