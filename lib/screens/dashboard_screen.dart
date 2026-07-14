@@ -1509,7 +1509,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                     style: const TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                   Text(
-                    'High traffic: ${highSatVb.toStringAsFixed(2)} sat/vB (${highBtcsKvB.toStringAsFixed(8)} BTCS/kvB)',
+                    'High traffic: ${highSatVb.toStringAsFixed(3)} sat/vB (${highBtcsKvB.toStringAsFixed(8)} BTCS/kvB)',
                     style: const TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                   const SizedBox(height: 8),
@@ -1519,7 +1519,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                         onPressed: () {
                           setDialogState(() {
                             controller.text = satPerVb
-                                ? lowSatVb.toStringAsFixed(2)
+                                ? lowSatVb.toStringAsFixed(3)
                                 : lowBtcsKvB.toStringAsFixed(8);
                             error = null;
                           });
@@ -1531,7 +1531,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                         onPressed: () {
                           setDialogState(() {
                             controller.text = satPerVb
-                                ? highSatVb.toStringAsFixed(2)
+                                ? highSatVb.toStringAsFixed(3)
                                 : highBtcsKvB.toStringAsFixed(8);
                             error = null;
                           });
@@ -1546,7 +1546,9 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     decoration: InputDecoration(
                       labelText: satPerVb ? 'Fee rate (sat/vB)' : 'Fee rate (BTCS/kvB)',
-                      hintText: satPerVb ? 'e.g. 0.23' : 'e.g. 0.00000226',
+                      hintText: satPerVb
+                          ? 'e.g. ${lowSatVb.toStringAsFixed(3)}'
+                          : 'e.g. ${lowBtcsKvB.toStringAsFixed(8)}',
                       errorText: error,
                     ),
                   ),
