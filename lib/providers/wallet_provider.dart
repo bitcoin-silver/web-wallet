@@ -968,6 +968,18 @@ class WalletProvider with ChangeNotifier {
           return false;
         }
 
+        final migrationFeeSource =
+            (migrationFeeResolution['source'] as String?) ?? 'unavailable';
+        const allowedNodeSources = {'estimated', 'baseline', 'clamped'};
+        if (!allowedNodeSources.contains(migrationFeeSource)) {
+          _isLoading = false;
+          _message =
+              '❌ Migration failed: node fee estimate unavailable '
+              '(source: $migrationFeeSource).';
+          notifyListeners();
+          return false;
+        }
+
         final migrationFeeRate =
             (migrationFeeResolution['feeRate'] as num).toDouble();
 

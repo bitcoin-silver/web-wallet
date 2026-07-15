@@ -32,7 +32,8 @@ migrate_working_dir/
 .pub/
 /build/
 backup/
-debug/ 
+debug/
+docs/ 
 
 # Symbolication related
 app.*.symbols

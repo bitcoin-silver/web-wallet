@@ -130,19 +130,21 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     }
   }
 
+  bool _isNodeFeeSource(WalletProvider provider) {
+    return provider.feeRateReady &&
+        (provider.feeRateSource == 'estimated' ||
+            provider.feeRateSource == 'baseline' ||
+            provider.feeRateSource == 'clamped');
+  }
+
   Color _feeSourceColor(WalletProvider provider) {
-    switch (provider.feeRateSource) {
-      case 'manual':
-        return Colors.amberAccent;
-      case 'clamped':
-        return Colors.orangeAccent;
-      case 'baseline':
-        return Colors.lightBlueAccent;
-      case 'estimated':
-        return Colors.greenAccent;
-      default:
-        return Colors.orangeAccent;
+    if (provider.feeRateSource == 'manual') {
+      return Colors.cyanAccent;
     }
+    if (_isNodeFeeSource(provider)) {
+      return Colors.greenAccent;
+    }
+    return Colors.amberAccent;
   }
 
   @override
@@ -1168,6 +1170,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
 
   Widget _buildSendTab(WalletProvider provider) {
     final amountErr = _amountError(provider);
+    final feeSnapshot = _currentDisplayedFee(provider);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -1274,35 +1277,16 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               ),
 
               const SizedBox(height: 12),
-              _buildFeeEstimate(provider),
+              _buildFeeEstimate(provider, feeSnapshot),
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  OutlinedButton(
-                    onPressed: provider.isLoading
-                        ? null
-                        : () async {
-                            final manualFeeRate = await _showManualFeeDialog(context);
-                            if (manualFeeRate != null) {
-                              provider.setManualFeeRate(manualFeeRate);
-                            }
-                          },
-                    child: const Text('Set Manual Fee'),
-                  ),
-                  const SizedBox(width: 8),
-                  TextButton(
-                    onPressed: provider.isFetchingFeeRate ? null : () => provider.fetchFeeRate(),
-                    child: const Text('Use Node Fee'),
-                  ),
-                ],
-              ),
+              _buildFeeSourceSelector(provider),
 
               if (_advancedSend) ...[
                 const SizedBox(height: 32),
                 _buildUtxoSelector(provider),
               ],
               const SizedBox(height: 12),
-              _buildSendPreview(provider),
+              _buildSendPreview(provider, feeSnapshot),
               const SizedBox(height: 40),
 
               ElevatedButton(
@@ -1333,11 +1317,14 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                               }
                             }
 
+                            final confirmFeeSnapshot = _currentDisplayedFee(provider);
                             final preConfirm = await _showPreSendConfirmDialog(
                               context: context,
                               provider: provider,
                               toAddress: _toController.text.trim(),
                               amount: amount,
+                              estimatedFee: confirmFeeSnapshot.fee,
+                              hasSelectedInputs: confirmFeeSnapshot.hasExactCoinControlFee,
                             );
                             if (!preConfirm) return;
 
@@ -1421,6 +1408,91 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     _amountController.text = total > 0 ? total.toStringAsFixed(8) : '';
   }
 
+  ({double fee, int? inputCount, bool amountAware}) _estimateSimpleModeFee(
+    WalletProvider provider,
+  ) {
+    final feeRate = provider.feeRate;
+    if (feeRate <= 0) {
+      return (fee: 0.0, inputCount: null, amountAware: false);
+    }
+
+    final confirmedUtxos = provider.availableUtxos
+        .map((u) => (u['amount'] as num?)?.toDouble() ?? 0.0)
+        .where((a) => a > 0)
+        .toList()
+      ..sort((a, b) => b.compareTo(a));
+
+    final enteredAmount = double.tryParse(_amountController.text.trim());
+    final hasAmount = enteredAmount != null && enteredAmount > 0;
+
+    int txSizeForInputs(int inputs) => 10 + (inputs * 148) + (2 * 34);
+    double feeForInputs(int inputs) =>
+        double.parse((feeRate * txSizeForInputs(inputs) / 1000).toStringAsFixed(8));
+
+    if (!hasAmount || confirmedUtxos.isEmpty) {
+      final fallbackInputs = confirmedUtxos.isEmpty
+          ? 2
+          : (confirmedUtxos.length >= 2 ? 2 : 1);
+      return (
+        fee: feeForInputs(fallbackInputs),
+        inputCount: fallbackInputs,
+        amountAware: false,
+      );
+    }
+
+    int inputsNeededFor(double requiredTotal) {
+      double total = 0.0;
+      int used = 0;
+      for (final amount in confirmedUtxos) {
+        total += amount;
+        used += 1;
+        if (total >= requiredTotal) {
+          return used;
+        }
+      }
+      return -1;
+    }
+
+    var guessInputs = 1;
+    for (var i = 0; i < 8; i++) {
+      final fee = feeForInputs(guessInputs);
+      final needed = inputsNeededFor(enteredAmount + fee);
+
+      if (needed <= 0) {
+        final fallbackInputs = confirmedUtxos.length >= 2 ? 2 : 1;
+        return (
+          fee: feeForInputs(fallbackInputs),
+          inputCount: fallbackInputs,
+          amountAware: false,
+        );
+      }
+
+      if (needed == guessInputs) {
+        return (fee: fee, inputCount: guessInputs, amountAware: true);
+      }
+
+      guessInputs = needed;
+    }
+
+    return (
+      fee: feeForInputs(guessInputs),
+      inputCount: guessInputs,
+      amountAware: true,
+    );
+  }
+
+  ({double fee, bool hasExactCoinControlFee, ({double fee, int? inputCount, bool amountAware}) simpleEstimate})
+      _currentDisplayedFee(WalletProvider provider) {
+    final hasExactCoinControlFee = _advancedSend && provider.selectedUtxoCount > 0;
+    final simpleEstimate = _estimateSimpleModeFee(provider);
+    final fee = hasExactCoinControlFee ? provider.estimatedFee : simpleEstimate.fee;
+    return (
+      fee: fee,
+      hasExactCoinControlFee: hasExactCoinControlFee,
+      simpleEstimate: simpleEstimate,
+    );
+  }
+
   Widget _buildFeeStateBanner(WalletProvider provider) {
     final bool warning = !provider.feeRateReady;
     final Color color = warning ? Colors.orange : Colors.green;
@@ -1448,6 +1520,86 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               onPressed: provider.isFetchingFeeRate ? null : () => provider.fetchFeeRate(),
               child: const Text('Retry'),
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFeeSourceSelector(WalletProvider provider) {
+    final manualSelected = provider.feeRateSource == 'manual';
+    final nodeSelected = _isNodeFeeSource(provider);
+    final currentColor = _feeSourceColor(provider);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Fee Source',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+              ),
+              Text(
+                _feeSourceLabel(provider),
+                style: TextStyle(color: currentColor, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: provider.isLoading
+                      ? null
+                      : () async {
+                          final manualFeeRate = await _showManualFeeDialog(context);
+                          if (manualFeeRate != null) {
+                            provider.setManualFeeRate(manualFeeRate);
+                          }
+                        },
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(
+                      color: manualSelected ? Colors.cyanAccent : Colors.white30,
+                      width: manualSelected ? 1.6 : 1.0,
+                    ),
+                    backgroundColor: manualSelected
+                        ? Colors.cyanAccent.withValues(alpha: 0.16)
+                        : Colors.transparent,
+                    foregroundColor: manualSelected ? Colors.cyanAccent : Colors.white70,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: const Text('Manual'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: provider.isFetchingFeeRate ? null : () => provider.fetchFeeRate(),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(
+                      color: nodeSelected ? Colors.greenAccent : Colors.white30,
+                      width: nodeSelected ? 1.6 : 1.0,
+                    ),
+                    backgroundColor: nodeSelected
+                        ? Colors.greenAccent.withValues(alpha: 0.14)
+                        : Colors.transparent,
+                    foregroundColor: nodeSelected ? Colors.greenAccent : Colors.white70,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: const Text('Auto (Node Fee)'),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -1616,36 +1768,83 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     required WalletProvider provider,
     required String toAddress,
     required double amount,
+    required double estimatedFee,
+    required bool hasSelectedInputs,
   }) async {
-    final hasSelectedInputs = _advancedSend && provider.selectedUtxoCount > 0;
-    final estimatedFee = hasSelectedInputs ? provider.estimatedFee : provider.estimatedSimpleFee;
     final feeSource = _feeSourceLabel(provider);
 
     final confirmed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) {
+        final sourceColor = _feeSourceColor(provider);
         return AlertDialog(
-          title: const Text('Confirm Transaction'),
+          title: const Row(
+            children: [
+              Icon(Icons.shield_outlined, color: Colors.cyanAccent, size: 22),
+              SizedBox(width: 8),
+              Text('Confirm Transaction'),
+            ],
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('To: $toAddress', style: const TextStyle(fontSize: 12)),
-              const SizedBox(height: 8),
-              Text('Amount: ${amount.toStringAsFixed(8)} BTCS'),
-              const SizedBox(height: 4),
-              Text('Estimated fee: ${estimatedFee.toStringAsFixed(8)} BTCS'),
-              const SizedBox(height: 4),
-              Text('Fee source: $feeSource'),
-              const SizedBox(height: 4),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: Text('To: $toAddress', style: const TextStyle(fontSize: 12)),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Amount', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                  Text(
+                    '${amount.toStringAsFixed(8)} BTCS',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Estimated Fee', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                  Text(
+                    '${estimatedFee.toStringAsFixed(8)} BTCS',
+                    style: const TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Fee Source', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                  Text(
+                    feeSource,
+                    style: TextStyle(color: sourceColor, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
               Text(
                 'Fee rate: ${provider.feeRate.toStringAsFixed(8)} BTCS/kvB '
                 '(${_formatSatVb(provider.feeRate)} sat/vB)',
+                style: const TextStyle(color: Colors.white70),
               ),
               if (hasSelectedInputs) ...[
-                const SizedBox(height: 4),
-                Text('Selected inputs: ${provider.selectedUtxoCount}'),
+                const SizedBox(height: 6),
+                Text(
+                  'Selected inputs: ${provider.selectedUtxoCount}',
+                  style: const TextStyle(color: Colors.white70),
+                ),
               ],
             ],
           ),
@@ -1677,21 +1876,86 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       barrierDismissible: false,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Transaction Sent'),
+          title: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.greenAccent, size: 24),
+              SizedBox(width: 8),
+              Text('Transaction Sent'),
+            ],
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Amount: ${amount.toStringAsFixed(8)} BTCS'),
-              const SizedBox(height: 4),
-              Text('Fee paid: ${fee.toStringAsFixed(8)} BTCS'),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.green.withValues(alpha: 0.35)),
+                ),
+                child: const Text(
+                  'Broadcasted to network',
+                  style: TextStyle(
+                    color: Colors.greenAccent,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Amount Sent', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                  Text(
+                    '${amount.toStringAsFixed(8)} BTCS',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Network Fee Paid', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                  Text(
+                    '${fee.toStringAsFixed(8)} BTCS',
+                    style: const TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
               if (txid.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                const Text('TXID:'),
+                const SizedBox(height: 12),
+                const Text('TXID', style: TextStyle(color: Colors.white60, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 4),
-                SelectableText(
-                  txid,
-                  style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.black,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.white24),
+                  ),
+                  child: SelectableText(
+                    txid,
+                    style: const TextStyle(fontSize: 12, fontFamily: 'monospace', color: Colors.cyanAccent),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () async {
+                      await Clipboard.setData(ClipboardData(text: txid));
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
+                        const SnackBar(content: Text('TXID copied')),
+                      );
+                    },
+                    icon: const Icon(Icons.copy, size: 16),
+                    label: const Text('Copy TXID'),
+                  ),
                 ),
               ],
             ],
@@ -1888,10 +2152,15 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     );
   }
 
-  Widget _buildFeeEstimate(WalletProvider provider) {
-    final hasSelectedInputs = _advancedSend && provider.selectedUtxoCount > 0;
-    final fee = hasSelectedInputs ? provider.estimatedFee : provider.estimatedSimpleFee;
-    final label = hasSelectedInputs ? 'Est. fee' : 'Est. fee (typical tx)';
+  Widget _buildFeeEstimate(
+    WalletProvider provider,
+    ({double fee, bool hasExactCoinControlFee, ({double fee, int? inputCount, bool amountAware}) simpleEstimate})
+        feeSnapshot,
+  ) {
+    final hasSelectedInputs = feeSnapshot.hasExactCoinControlFee;
+    final simpleEstimate = feeSnapshot.simpleEstimate;
+    final fee = feeSnapshot.fee;
+    final label = hasSelectedInputs ? 'Est. fee' : 'Estimated Network Fee';
 
     if (provider.isFetchingFeeRate) {
       return const Padding(
@@ -1908,6 +2177,11 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     final feeRate = provider.feeRate;
     final feeRateSatVb = _formatSatVb(feeRate);
     final feeSource = _feeSourceLabel(provider);
+    final detailsLabel = hasSelectedInputs
+      ? 'Size-aware estimate for ${provider.selectedUtxoCount} selected input(s)'
+      : simpleEstimate.amountAware
+        ? 'Amount-aware estimate using ~${simpleEstimate.inputCount ?? 1} input(s)'
+        : 'Simple mode estimate using ~${simpleEstimate.inputCount ?? 2} input(s)';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1954,17 +2228,26 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             'Rate: ${feeRate.toStringAsFixed(8)} BTCS/kvB ($feeRateSatVb sat/vB)',
             style: const TextStyle(fontSize: 11, color: Colors.grey),
           ),
+          const SizedBox(height: 6),
+          Text(
+            detailsLabel,
+            style: const TextStyle(fontSize: 11, color: Colors.grey),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildSendPreview(WalletProvider provider) {
+  Widget _buildSendPreview(
+    WalletProvider provider,
+    ({double fee, bool hasExactCoinControlFee, ({double fee, int? inputCount, bool amountAware}) simpleEstimate})
+        feeSnapshot,
+  ) {
     final amount = double.tryParse(_amountController.text.trim()) ?? 0.0;
     if (amount <= 0) return const SizedBox.shrink();
 
-    final hasSelectedInputs = _advancedSend && provider.selectedUtxoCount > 0;
-    final fee = hasSelectedInputs ? provider.estimatedFee : provider.estimatedSimpleFee;
+    final hasSelectedInputs = feeSnapshot.hasExactCoinControlFee;
+    final fee = feeSnapshot.fee;
 
     final selectedInputsSats = hasSelectedInputs ? _btcsToSats(provider.selectedUtxoTotal) : 0;
     final autoSpendableSats = _btcsToSats(provider.wallet?.balance ?? 0.0);
@@ -2018,7 +2301,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             children: [
               const Text('Estimated Fee', style: TextStyle(color: Colors.white60, fontSize: 12)),
               Text(
-                '${_satsToBtcs(feeSats).toStringAsFixed(8)} BTCS',
+                '${fee.toStringAsFixed(8)} BTCS',
                 style: const TextStyle(color: Colors.white, fontSize: 12),
               ),
             ],
