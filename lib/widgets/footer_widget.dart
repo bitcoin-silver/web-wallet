@@ -273,22 +273,21 @@ class FooterWidget extends StatelessWidget {
           ],
         );
 
-        final links = Wrap(
+        final bottomLinks = Wrap(
           spacing: 20,
           runSpacing: 10,
           alignment: isMobile ? WrapAlignment.center : WrapAlignment.start,
           children: [
-            _buildBottomLink('Wallets', FontAwesomeIcons.wallet),
-            _buildBottomLink('Features', FontAwesomeIcons.star),
-            _buildBottomLink('Specs', FontAwesomeIcons.listCheck),
-            _buildBottomLink('Downloads', FontAwesomeIcons.download),
+            _buildBottomLink('Privacy', FontAwesomeIcons.shieldHalved, 'https://bitcoinsilver.top/privacy.html'),
+            _buildBottomLink('Terms', FontAwesomeIcons.fileContract, 'https://bitcoinsilver.top/terms.html'),
+            _buildBottomLink('Risk Disclosure', FontAwesomeIcons.triangleExclamation, 'https://bitcoinsilver.top/risk-disclosure.html'),
           ],
         );
 
         if (isMobile) {
           return Column(
             children: [
-              links,
+              bottomLinks,
               const SizedBox(height: 24),
               origin,
               const SizedBox(height: 12),
@@ -303,7 +302,7 @@ class FooterWidget extends StatelessWidget {
             const Spacer(),
             origin,
             const Spacer(),
-            links,
+            bottomLinks,
           ],
         );
       },
@@ -385,11 +384,11 @@ class FooterWidget extends StatelessWidget {
     );
   }  
 
-  Widget _buildBottomLink(String label, dynamic icon) {
+  Widget _buildBottomLink(String label, dynamic icon, String url) {
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: () => _launchUrl('https://bitcoinsilver.top/#${label.toLowerCase()}'),
+        onTap: () => _launchUrl(url),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
