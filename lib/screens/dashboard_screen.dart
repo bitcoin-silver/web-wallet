@@ -1135,7 +1135,23 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                   return;
                 }
 
-                final success = await provider.migrateToSeed(words: _migrationSeedWords);
+                var preferBatchSweep = false;
+                final migrationBatchPreview = await provider.assessMigrationBatchCandidate();
+                if (dashboardContext.mounted && migrationBatchPreview['isCandidate'] == true) {
+                  final decision = await _showMigrationBatchDecisionDialog(
+                    dashboardContext,
+                    migrationBatchPreview,
+                  );
+                  if (decision != true) {
+                    return;
+                  }
+                  preferBatchSweep = true;
+                }
+
+                final success = await provider.migrateToSeed(
+                  words: _migrationSeedWords,
+                  preferBatchSweep: preferBatchSweep,
+                );
                 if (success && dashboardContext.mounted) {
                   _showBackupDialog(dashboardContext, provider);
                 }
@@ -1149,6 +1165,111 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           ],
         ),
       ),
+    );
+  }
+
+  Future<bool?> _showMigrationBatchDecisionDialog(
+    BuildContext context,
+    Map<String, dynamic> preview,
+  ) async {
+    String reasonLabel(String reason) {
+      switch (reason) {
+        case 'input-count':
+          return 'High input count detected';
+        case 'tx-size':
+          return 'Large transaction size detected';
+        default:
+          return 'Multiple transactions required';
+      }
+    }
+
+    final reason = (preview['reason'] as String?) ?? 'none';
+    final inputCount = (preview['inputCount'] as int?) ?? 0;
+    final estimatedVbytes = (preview['estimatedVbytes'] as int?) ?? 0;
+    final estimatedBatchCount = (preview['estimatedBatchCount'] as int?) ?? 1;
+    final confirmedTotal = (preview['confirmedTotal'] as num?)?.toDouble() ?? 0.0;
+
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.layers_rounded, color: Colors.orangeAccent),
+              SizedBox(width: 8),
+              Text('Batch Migration Required'),
+            ],
+          ),
+          content: SizedBox(
+            width: 520,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  reasonLabel(reason),
+                  style: const TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'This migration cannot be completed safely in a single transaction. '
+                  'Batch migration will split the sweep into multiple broadcasts to your new seed wallet address.',
+                  style: TextStyle(color: Colors.white70),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Confirmed balance', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                    Text('${confirmedTotal.toStringAsFixed(8)} BTCS'),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Inputs to migrate', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                    Text('$inputCount'),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Estimated single tx size', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                    Text('$estimatedVbytes vB'),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Estimated batch tx count', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                    Text('$estimatedBatchCount'),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Important: batch migration means multiple TXIDs. If a later batch fails, earlier batches may already be confirmed. '
+                  'You must back up the new seed phrase immediately after migration starts.',
+                  style: TextStyle(color: Colors.orangeAccent, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Proceed with Batch Migration'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -1317,6 +1438,37 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                               }
                             }
 
+                            var preferBatchSend = true;
+                            while (mounted) {
+                              final batchPreview = await provider.assessBatchSendCandidate(
+                                _toController.text.trim(),
+                                amount,
+                                manualFeeRateCoinPerKb: feeRateCoinPerKvB,
+                              );
+                              if (batchPreview['isCandidate'] != true) {
+                                break;
+                              }
+
+                              final decision = await _showBatchDecisionDialog(
+                                context: context,
+                                provider: provider,
+                                amount: amount,
+                                preview: batchPreview,
+                              );
+                              if (decision == null || decision == 'cancel') return;
+
+                              if (decision == 'manual-fee') {
+                                final manualFeeRate = await _showManualFeeDialog(context);
+                                if (manualFeeRate == null) return;
+                                provider.setManualFeeRate(manualFeeRate);
+                                feeRateCoinPerKvB = manualFeeRate;
+                                continue;
+                              }
+
+                              preferBatchSend = decision == 'batch';
+                              break;
+                            }
+
                             final confirmFeeSnapshot = _currentDisplayedFee(provider);
                             final preConfirm = await _showPreSendConfirmDialog(
                               context: context,
@@ -1332,6 +1484,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                               _toController.text.trim(),
                               amount,
                               manualFeeRateCoinPerKb: feeRateCoinPerKvB,
+                              preferBatchSend: preferBatchSend,
                             );
 
                             if (result['success'] != true && result['requiresManualFee'] == true && mounted) {
@@ -1342,15 +1495,15 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                                   _toController.text.trim(),
                                   amount,
                                   manualFeeRateCoinPerKb: manualFeeRate,
+                                  preferBatchSend: preferBatchSend,
                                 );
                                 if (retryResult['success'] == true) {
                                   _resetSendForm(provider);
                                   if (mounted) {
-                                    await _showPostSendAckDialog(
-                                      context: context,
-                                      txid: (retryResult['txid'] as String?) ?? '',
-                                      amount: amount,
-                                      fee: (retryResult['fee'] as num?)?.toDouble() ?? 0.0,
+                                    await _showSendAckFromResult(
+                                      context,
+                                      retryResult,
+                                      requestedAmount: amount,
                                     );
                                   }
                                 }
@@ -1358,14 +1511,41 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                               return;
                             }
 
+                            if (result['success'] != true && !preferBatchSend && mounted) {
+                              final message = (result['message'] as String?) ?? 'Transaction failed.';
+                              if (_isLikelyBatchFailureMessage(message)) {
+                                final retryAsBatch = await _showRetryBatchDialog(
+                                  context: context,
+                                  message: message,
+                                );
+                                if (retryAsBatch == true) {
+                                  final retryResult = await provider.sendTransaction(
+                                    _toController.text.trim(),
+                                    amount,
+                                    manualFeeRateCoinPerKb: feeRateCoinPerKvB,
+                                    preferBatchSend: true,
+                                  );
+                                  if (retryResult['success'] == true) {
+                                    _resetSendForm(provider);
+                                    if (mounted) {
+                                      await _showSendAckFromResult(
+                                        context,
+                                        retryResult,
+                                        requestedAmount: amount,
+                                      );
+                                    }
+                                  }
+                                }
+                              }
+                            }
+
                             if (result['success'] == true) {
                               _resetSendForm(provider);
                               if (mounted) {
-                                await _showPostSendAckDialog(
-                                  context: context,
-                                  txid: (result['txid'] as String?) ?? '',
-                                  amount: amount,
-                                  fee: (result['fee'] as num?)?.toDouble() ?? 0.0,
+                                await _showSendAckFromResult(
+                                  context,
+                                  result,
+                                  requestedAmount: amount,
                                 );
                               }
                             }
@@ -1971,6 +2151,378 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     );
   }
 
+  Future<String?> _showBatchDecisionDialog({
+    required BuildContext context,
+    required WalletProvider provider,
+    required double amount,
+    required Map<String, dynamic> preview,
+  }) async {
+    String reasonLabel(String reason) {
+      switch (reason) {
+        case 'sweep-too-large':
+          return 'Large sweep detected';
+        case 'input-count':
+          return 'High input count detected';
+        case 'tx-size':
+          return 'Large transaction size detected';
+        default:
+          return 'Batch candidate detected';
+      }
+    }
+
+    final reason = (preview['reason'] as String?) ?? 'none';
+    final predictedInputs = (preview['predictedInputCount'] as int?) ?? 0;
+    final predictedVbytes = (preview['predictedVbytes'] as int?) ?? 0;
+    final estimatedBatchCount = (preview['estimatedBatchCount'] as int?) ?? 1;
+    final estimatedSingleFee =
+        (preview['estimatedSingleFee'] as num?)?.toDouble() ?? 0.0;
+    final estimatedTotalBatchFee =
+        (preview['estimatedTotalBatchFee'] as num?)?.toDouble() ?? 0.0;
+    final estimatedNetDelivered =
+        (preview['estimatedNetDelivered'] as num?)?.toDouble() ?? (amount - estimatedTotalBatchFee);
+    final usingManualFee = provider.feeRateSource == 'manual';
+
+    final decision = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.layers_rounded, color: Colors.orangeAccent),
+              SizedBox(width: 8),
+              Text('Batch Send Suggested'),
+            ],
+          ),
+          content: SizedBox(
+            width: 520,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  reasonLabel(reason),
+                  style: const TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'This transfer may exceed safe single-transaction limits. '
+                  'You can batch it into multiple broadcasts or continue with normal send.',
+                  style: const TextStyle(color: Colors.white70),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Requested amount', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                    Text('${amount.toStringAsFixed(8)} BTCS'),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Predicted inputs', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                    Text('$predictedInputs'),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Predicted tx size', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                    Text('$predictedVbytes vB'),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Estimated batch count', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                    Text('$estimatedBatchCount'),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Est. single fee', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                    Text('${estimatedSingleFee.toStringAsFixed(8)} BTCS'),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Est. total batch fee', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                    Text('${estimatedTotalBatchFee.toStringAsFixed(8)} BTCS'),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Est. net delivered', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                    Text('${estimatedNetDelivered.toStringAsFixed(8)} BTCS'),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Estimates may vary depending on final input selection and mempool conditions.',
+                  style: TextStyle(color: Colors.white38, fontSize: 11),
+                ),
+                if (!usingManualFee) ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    'You are currently using node-estimated fee. For batch sends, consider setting a manual fee first for more predictable total cost.',
+                    style: TextStyle(color: Colors.orangeAccent, fontSize: 11),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, 'cancel'),
+              child: const Text('Cancel'),
+            ),
+            if (!usingManualFee)
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, 'manual-fee'),
+                child: const Text('Set Manual Fee'),
+              ),
+            OutlinedButton(
+              onPressed: () => Navigator.pop(dialogContext, 'normal'),
+              child: const Text('Normal Send'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext, 'batch'),
+              child: const Text('Batch Send'),
+            ),
+          ],
+        );
+      },
+    );
+
+    return decision;
+  }
+
+  bool _isLikelyBatchFailureMessage(String message) {
+    final normalized = message.toLowerCase();
+    return normalized.contains('too many') ||
+        normalized.contains('tx-size') ||
+        normalized.contains('tx size') ||
+        normalized.contains('oversize') ||
+        normalized.contains('too large') ||
+        normalized.contains('too-long-mempool-chain') ||
+        normalized.contains('mempool chain') ||
+        normalized.contains('non-bip68-final') ||
+        normalized.contains('insufficient fee') ||
+        normalized.contains('rejecting replacement');
+  }
+
+  Future<bool?> _showRetryBatchDialog({
+    required BuildContext context,
+    required String message,
+  }) async {
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent),
+              SizedBox(width: 8),
+              Text('Normal Send Failed'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'This failure may be caused by single-transaction size or mempool constraints.',
+                style: TextStyle(color: Colors.white70),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: Text(message, style: const TextStyle(fontSize: 12)),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Retry now using Batch Send?',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Retry as Batch'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showSendAckFromResult(
+    BuildContext context,
+    Map<String, dynamic> result, {
+    required double requestedAmount,
+  }) async {
+    final batchTxids = (result['batchTxids'] as List<dynamic>? ?? [])
+        .map((e) => e.toString())
+        .where((txid) => txid.isNotEmpty)
+        .toList();
+    final batched = (result['batched'] == true) || batchTxids.isNotEmpty;
+
+    if (batched) {
+      await _showBatchSendAckDialog(
+        context: context,
+        txids: batchTxids,
+        requestedAmount: requestedAmount,
+        grossAmount: (result['grossAmount'] as num?)?.toDouble(),
+        totalFee: (result['fee'] as num?)?.toDouble() ?? 0.0,
+        netAmount: (result['netAmount'] as num?)?.toDouble(),
+      );
+      return;
+    }
+
+    await _showPostSendAckDialog(
+      context: context,
+      txid: (result['txid'] as String?) ?? '',
+      amount: requestedAmount,
+      fee: (result['fee'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+
+  Future<void> _showBatchSendAckDialog({
+    required BuildContext context,
+    required List<String> txids,
+    required double requestedAmount,
+    required double totalFee,
+    double? grossAmount,
+    double? netAmount,
+  }) async {
+    final displayedGross = grossAmount ?? requestedAmount;
+    final displayedNet = netAmount ?? (displayedGross - totalFee);
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.fact_check_rounded, color: Colors.greenAccent, size: 24),
+              SizedBox(width: 8),
+              Text('Batch Send Complete'),
+            ],
+          ),
+          content: SizedBox(
+            width: 520,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Broadcasted ${txids.length} transaction${txids.length == 1 ? '' : 's'}.',
+                  style: const TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Requested Amount', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                    Text('${requestedAmount.toStringAsFixed(8)} BTCS', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Gross Sent', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                    Text('${displayedGross.toStringAsFixed(8)} BTCS', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Total Fee Paid', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                    Text('${totalFee.toStringAsFixed(8)} BTCS', style: const TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Estimated Net Delivered', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                    Text('${displayedNet.toStringAsFixed(8)} BTCS', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  ],
+                ),
+                if (txids.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Text('Batch TXIDs', style: TextStyle(color: Colors.white60, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 4),
+                  Container(
+                    width: double.infinity,
+                    constraints: const BoxConstraints(maxHeight: 180),
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.black,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.white24),
+                    ),
+                    child: SingleChildScrollView(
+                      child: SelectableText(
+                        txids.join('\n'),
+                        style: const TextStyle(fontSize: 12, fontFamily: 'monospace', color: Colors.cyanAccent),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () async {
+                        await Clipboard.setData(ClipboardData(text: txids.join('\n')));
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(dialogContext).showSnackBar(
+                          const SnackBar(content: Text('Batch TXIDs copied')),
+                        );
+                      },
+                      icon: const Icon(Icons.copy, size: 16),
+                      label: const Text('Copy TXIDs'),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Acknowledge'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildUtxoSelector(WalletProvider provider) {
     if (provider.isLoadingUtxos) {
       return const Padding(
@@ -2474,7 +3026,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         const SizedBox(height: 10),
         const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Text('BTCS Web-Wallet version 2.7', 
+              child: Text('BTCS Web-Wallet version 2.8 (2024-06-01) - Powered by Bitcoin Silver Core', 
               style: TextStyle(color: Colors.white54, fontSize: 12),
               textAlign: TextAlign.center
         ),      

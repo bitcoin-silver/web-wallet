@@ -18,77 +18,16 @@ A modern, secure, non-custodial, client-side signing wallet for the Bitcoin Silv
   <a href="https://explorer.bitcoinsilver.top">Explorer</a>
 </p>
 
-## 🚀 What's New in v2.7
+## Release Notes
 
-### 💸 Safer Fee Estimation (Live-Network Ready)
+For professional release tracking, detailed version history is maintained in [CHANGELOG.md](CHANGELOG.md).
 
-- **Smart Fee Sanity Guard**: `estimatesmartfee` values are now validated against node policy baseline fees.
-- **Baseline Fallback**: If smart fee is missing/unusable, wallet falls back automatically to a safe baseline derived from `relayfee`, `incrementalfee`, and `mempoolminfee`.
-- **Outlier Clamp**: Extreme estimator spikes are clamped to baseline to prevent accidental overpay.
+Latest major release: v2.8
 
-### 🧭 Better Send Controls
-
-- **Always-Available Manual Fee**: Users can set manual fee even when node fee is available.
-- **Quick Revert to Node Fee**: One-click switch back from manual fee to node-driven fee mode.
-- **Send Preview Improvements**: Transaction preview shows selected inputs, amount, estimated fee, fee source, fee rate, and expected change.
-
-### 🔄 Migration Send Path Hardening
-
-- **Deterministic Fee for Migration Sweep**: Migration now resolves fee first, then sends using that exact resolved value.
-- **Same Improved Fee Logic**: Migration uses the same clamped smart-fee + baseline fallback safety path as normal send.
-
----
-
-## 🚀 What's New in v2.6
-
-### 🛑 Safe Transfer Guardrails (Migration + Send)
-
-This release prioritizes safety-first transfer behavior for large and complex wallets:
-
-- **Migration Preflight Gates**: Migration now blocks early when smart-fee is unavailable, pending transactions exist, or sweep conditions are unsafe.
-- **No Automatic Chunked Sweep**: If a migration/send would require chained chunked transactions, the wallet now **aborts with a clear warning** instead of attempting partial multi-step execution.
-- **Large Send Safety Block**: Near-max sends that exceed safe single-sweep limits are blocked and users are instructed to split manually.
-
-### 🧮 Satoshi-Level Transaction Math
-
-- **Precision Upgrade**: Core send logic now uses satoshi-based arithmetic for fee/input/output calculations to reduce floating-point rounding edge cases.
-- **More Deterministic Fees**: Sweep/change math is calculated in integer satoshis before final serialization and broadcast.
-
-### ✅ Migration Reliability Improvements
-
-- **Pending Transaction Hard Stop**: Migration is blocked until mempool activity is confirmed.
-- **Controlled Failure Behavior**: Unsafe migration states are rejected before broadcast wherever possible.
-
----
-
-## What's New in v2.5
-
-### 🪙 Coin Control (Advanced Send)
-
-Full control over which UTXOs are used in a transaction:
-
-- **Advanced UI**: Manually hand-pick inputs from your confirmed UTXO set.
-- **Live Summary**: Instant updates on total selected inputs and transaction size.
-- **Management**: Scrollable UTXO list with index, TXID, amount, and confirmation status.
-- **Flexibility**: Built-in 'All / None' selectors for rapid management.
-
-### 💸 Fee Estimation
-
-- **Dynamic Calculation**: Real-time vByte estimation based on input/output count.
-- **Smart Rates**: Integrated `estimatesmartfee` integration for market-accurate fees.
-- **Net Send Display**: Always know exactly what the recipient receives after miner fees.
-
-### ✅ Validation & Guardrails
-
-- **Real-time RPC Validation**: Address format verified via node-side `validateaddress` (700ms debounce).
-- **Hard Guards**: Prevents dust inputs (< 0.00000546), negative amounts, and insufficient balance errors before the 'Send' button is ever active.
-
-### 📈 Precision Data
-
-- **Confirmation Accuracy**: Real-time confirmation tracking calculated via `getblockcount` - `utxo.height`.
-- **Address-Agnostic Routing**: Native support for Native SegWit (bs...), Legacy P2PKH (b/B...), and Legacy P2SH (8/3...) address types with automatic script generation.
-
----
+- Opt-in batch send flow for large transfers with clear user choice and preview.
+- Retry-as-batch option when normal single-transaction send fails under size or input constraints.
+- Batch migration consent flow with explicit multiple-TX explanation and safety warnings.
+- Improved migration completion handling for partial multi-transaction outcomes.
 
 ## 🛡️ Security Architecture
 
@@ -106,53 +45,6 @@ This version marks a major shift in our security model:
 - **Cryptography**: PointyCastle (RIPEMD160/SHA256).
 - **Frontend**: Flutter Web (Optimized for performance).
 - **Communication**: JSON-RPC over HTTPS.
-
-## Major Updates in v2.4
-
-### 💰 Live price update fetched directly from LiveCoinWatch
-
-- Bitcoin Silver price is aquired directly from LiveCoinWatch and updated every 5 minutes.
-- Wallet balance is converted in USD and displayed to keep user informed about price fluctuations.
-
-### 🏗️ Modular Architecture
-
-The project has been refactored from a monolithic structure to a scalable, modular architecture using the **Provider** pattern:
-
-- **Models**: Structured data objects for Wallets and Transactions.
-- **Providers**: Centralized state management for UI reactivity.
-- **Services**: Dedicated logic for cryptography, storage, and RPC communication.
-- **Screens**: Dedicated UI layers for Welcome, Setup, Dashboard, and Network Info.
-
-### 🌱 Seed Phrase Support (BIP39)
-
-Moving beyond raw private keys, the wallet now supports modern **BIP39 Seed Phrases**:
-
-- **Generate 12 or 24 words**: Choose your desired security level.
-- **BIP44 Derivation**: Industry-standard derivation paths for maximum compatibility.
-- **Secure Backup UI**: Dedicated interface to ensure users save their phrases correctly.
-
-### 🔄 WIF-to-Seed Migration (Sweep)
-
-A unique tool to help legacy users upgrade to modern security:
-
-- **Automatic Sweep**: Transfer all funds from a legacy WIF key to a new Seed-derived address in one click.
-- **Smart Handling**: If the wallet is empty, it upgrades the wallet type instantly without requiring a blockchain transaction.
-- **Forced Backup**: Automatically prompts the user to secure their new keys post-migration.
-
-### 📊 Real-time Network Info
-
-A new dashboard to monitor the BTCS network health directly within the wallet:
-
-- **Blockchain Stats**: Height, Difficulty, and Median Time.
-- **Mempool Metrics**: Pending transaction count and size.
-- **Mining Data**: Global network hashrate with automatic unit conversion (GH/s, TH/s).
-
-### 🛡️ Enhanced Security
-
-- **In-Memory Storage**: Sensitive keys now live only in the application's RAM.
-- **Refresh Protection**: Refreshing the browser (F5) now clears the session and logs the user out, preventing "partial state" mnemonic loss.
-- **Zero Leaks**: All debug prints and sensitive logs have been removed for production.
-- **CORS-Ready RPC**: Improved RPC communication that works seamlessly with secure proxies.
 
 ## Features
 

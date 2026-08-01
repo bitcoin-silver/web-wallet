@@ -158,7 +158,7 @@ class _SetupScreenState extends State<SetupScreen> {
                 ],
                 const SizedBox(height: 40),
                 const Text(
-                  'BTCS Web-Wallet version 2.7',
+                  'BTCS Web-Wallet version 2.8 (2024-06-01) - Powered by Bitcoin Silver Core',
                   style: TextStyle(color: Colors.white54, fontSize: 14),
                   textAlign: TextAlign.center,
                 ),
