@@ -996,9 +996,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       );
     }
 
-    final confirmationsLabel = tx.confirmations == 1
-        ? '1 conf'
-        : '${tx.confirmations} conf';
+    final confirmationsLabel = _formatConfirmationsLabel(tx.confirmations);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
@@ -1013,6 +1011,36 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             fontSize: 9, color: Colors.greenAccent, fontWeight: FontWeight.bold),
       ),
     );
+  }
+
+  String _formatConfirmationsLabel(int confirmations) {
+    if (confirmations <= 1) {
+      return '$confirmations conf';
+    }
+    return '${_formatCompactConfirmationCount(confirmations)} conf';
+  }
+
+  String _formatCompactConfirmationCount(int confirmations) {
+    if (confirmations < 1000) {
+      return '$confirmations';
+    }
+
+    const suffixes = ['K', 'M', 'B', 'T'];
+    double value = confirmations.toDouble();
+    var suffixIndex = -1;
+
+    while (value >= 1000 && suffixIndex < suffixes.length - 1) {
+      value /= 1000;
+      suffixIndex++;
+    }
+
+    var compact = value.toStringAsPrecision(3);
+    if (compact.contains('.')) {
+      compact = compact.replaceFirst(RegExp(r'0+$'), '');
+      compact = compact.replaceFirst(RegExp(r'\.$'), '');
+    }
+
+    return '$compact${suffixes[suffixIndex]}';
   }
 
   int _migrationSeedWords = 12;
@@ -2676,7 +2704,9 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                         SizedBox(
                           width: 52,
                           child: Text(
-                            '${utxo['confirmations']}',
+                            _formatCompactConfirmationCount(
+                              (utxo['confirmations'] as num?)?.toInt() ?? 0,
+                            ),
                             style: const TextStyle(fontSize: 12, color: Colors.grey),
                             textAlign: TextAlign.center,
                           ),
