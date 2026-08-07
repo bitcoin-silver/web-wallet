@@ -712,7 +712,9 @@ class WalletProvider with ChangeNotifier {
     final sweepTrigger = nearSweep &&
         (sortedAmounts.length > _maxMigrationSweepInputs ||
             (11 + (sortedAmounts.length * 68) + 31) > _maxMigrationSweepVbytes);
-    final isCandidate = sweepTrigger || exceedsInputs || exceedsVbytes;
+    // Batch send implementation is sweep-oriented in this flow, so only
+    // suggest batch when the request is effectively a near-sweep transfer.
+    final isCandidate = nearSweep && (sweepTrigger || exceedsInputs || exceedsVbytes);
 
     final chunkSize = _maxSweepInputsPerBatchTx();
     final estimatedBatchCount =
