@@ -2706,6 +2706,22 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         ),
         const SizedBox(height: 8),
 
+        if (provider.coinControlTruncatedCount > 0)
+          Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.orange.withValues(alpha: 0.08),
+              border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              'Showing top ${provider.availableUtxos.length} inputs by amount. '
+              '${provider.coinControlTruncatedCount} smaller input(s) are hidden for performance.',
+              style: const TextStyle(color: Colors.orangeAccent, fontSize: 12),
+            ),
+          ),
+
         // Summary bar
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 200),

@@ -12,6 +12,7 @@ class WalletProvider with ChangeNotifier {
   static const Duration _rememberSessionTtl = Duration(days: 7);
   static const int _maxMigrationSweepInputs = 120;
   static const int _maxMigrationSweepVbytes = 90000;
+  static const int _maxCoinControlUtxos = 1500;
 
   WalletModel? _wallet;
   bool _isLoading = false;
@@ -55,6 +56,7 @@ class WalletProvider with ChangeNotifier {
   Set<String> _selectedUtxoKeys = {}; // "txid:vout"
   bool _isLoadingUtxos = false;
   int _utxoPage = 0;
+  int _coinControlTruncatedCount = 0;
   static const int _utxosPerPage = 15;
 
   List<Map<String, dynamic>> get availableUtxos => _availableUtxos;
@@ -70,6 +72,7 @@ class WalletProvider with ChangeNotifier {
   double? get feeSanityCeiling => _feeSanityCeiling;
   String get feeRateStatusMessage => _feeRateStatusMessage;
   int get utxoPage => _utxoPage;
+  int get coinControlTruncatedCount => _coinControlTruncatedCount;
   int get utxoPageCount => (_availableUtxos.isEmpty) ? 1 : (_availableUtxos.length / _utxosPerPage).ceil();
   int get selectedUtxoCount => _selectedUtxoKeys.length;
   // Typical 1-in 2-out tx = 10 + 148 + 68 = 226 bytes
@@ -860,6 +863,7 @@ class WalletProvider with ChangeNotifier {
     _availableUtxos = [];
     _selectedUtxoKeys = {};
     _utxoPage = 0;
+    _coinControlTruncatedCount = 0;
     notifyListeners();
 
     try {
@@ -871,6 +875,11 @@ class WalletProvider with ChangeNotifier {
           .toList();
       _availableUtxos.sort((a, b) =>
           (b['amount'] as num).toDouble().compareTo((a['amount'] as num).toDouble()));
+
+      if (_availableUtxos.length > _maxCoinControlUtxos) {
+        _coinControlTruncatedCount = _availableUtxos.length - _maxCoinControlUtxos;
+        _availableUtxos = _availableUtxos.sublist(0, _maxCoinControlUtxos);
+      }
 
       await fetchFeeRate();
     } catch (_) {
@@ -912,6 +921,7 @@ class WalletProvider with ChangeNotifier {
     _selectedUtxoKeys = {};
     _utxoPage = 0;
     _isLoadingUtxos = false;
+    _coinControlTruncatedCount = 0;
   }
 
   Future<bool> validateAddress(String address) async {
