@@ -449,6 +449,9 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   }
 
   Widget _buildBalanceCard(WalletModel wallet, WalletProvider provider) {
+    final isMobile = MediaQuery.of(context).size.width <= 700;
+    final balanceFontSize = isMobile ? 30.0 : 40.0;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(32),
@@ -506,9 +509,19 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                       ],
                     ),
                     const SizedBox(height: 8),
-                    Text(
-                      '${wallet.totalBalance.toStringAsFixed(2)} BTCS',
-                      style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.white),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        '${wallet.totalBalance.toStringAsFixed(2)} BTCS',
+                        maxLines: 1,
+                        softWrap: false,
+                        style: TextStyle(
+                          fontSize: balanceFontSize,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
                     ),
                     if (wallet.hasPending) ...[
                       const SizedBox(height: 8),
