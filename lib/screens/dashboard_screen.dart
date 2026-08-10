@@ -485,7 +485,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                   children: [
                     Row(
                       children: [
-                        const Text('Total Balance', style: TextStyle(color: Colors.white70, fontSize: 16)),
+                        const Text('Wallet Balance', style: TextStyle(color: Colors.white70, fontSize: 16)),
                         if (wallet.hasPending) ...[
                           const SizedBox(width: 8),
                           Container(
@@ -3337,7 +3337,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         const SizedBox(height: 10),
         const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Text('BTCS Web-Wallet version 2.8 (2024-06-01) - Powered by Bitcoin Silver Core', 
+              child: Text('BTCS Web-Wallet version 2.8 - Powered by Bitcoin Silver Core', 
               style: TextStyle(color: Colors.white54, fontSize: 12),
               textAlign: TextAlign.center
         ),      
