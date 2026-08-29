@@ -180,7 +180,7 @@ class FooterWidget extends StatelessWidget {
       title: 'Community',
       icon: FontAwesomeIcons.users,
       links: [
-        _FooterLink('Discord', 'https://discord.com/invite/Pbt2R55XBt', icon: FontAwesomeIcons.discord),
+        _FooterLink('Discord', 'https://discord.gg/wCmdJGXFr7', icon: FontAwesomeIcons.discord),
         _FooterLink('Telegram', 'https://t.me/official_bitcoinsilver', icon: FontAwesomeIcons.telegram),
         _FooterLink('Twitter / X', 'https://x.com/Official_BTCS', icon: FontAwesomeIcons.xTwitter),
       ],
