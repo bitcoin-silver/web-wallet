@@ -1452,25 +1452,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               _buildFeeSourceSelector(provider),
 
               const SizedBox(height: 20),
-              TextField(
-                controller: _messageController,
-                maxLines: 2,
-                onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                  labelText: 'Message (optional)',
-                  hintText: 'Attached publicly on-chain via OP_RETURN',
-                  helperText:
-                      '${utf8.encode(_messageController.text).length}/80 bytes · visible to anyone on the blockchain',
-                  errorText: _messageError(),
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.only(top: 4, left: 4),
-                child: Text(
-                  'Permanent and public — please keep it civil.',
-                  style: TextStyle(fontSize: 11, color: Colors.white38, fontStyle: FontStyle.italic),
-                ),
-              ),
+              _buildMessageBox(),
 
               if (_advancedSend) ...[
                 const SizedBox(height: 32),
@@ -1652,6 +1634,107 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildMessageBox() {
+    final byteLen = utf8.encode(_messageController.text).length;
+    final over = byteLen > 80;
+    final counterColor = over
+        ? Colors.redAccent
+        : byteLen > 60
+            ? Colors.amberAccent
+            : Colors.cyanAccent;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.cyanAccent.withValues(alpha: 0.08),
+            Colors.cyanAccent.withValues(alpha: 0.02),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.chat_bubble_outline_rounded, color: Colors.cyanAccent, size: 16),
+              const SizedBox(width: 6),
+              const Text(
+                'On-Chain Message',
+                style: TextStyle(color: Colors.cyanAccent, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.3),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text('OPTIONAL', style: TextStyle(color: Colors.white54, fontSize: 9, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+              ),
+              const Spacer(),
+              Text(
+                '$byteLen/80',
+                style: TextStyle(color: counterColor, fontSize: 11, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _messageController,
+            maxLines: 2,
+            onChanged: (_) => setState(() {}),
+            style: const TextStyle(fontSize: 14),
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: 'Say something on the blockchain forever…',
+              filled: true,
+              fillColor: Colors.black.withValues(alpha: 0.22),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: Colors.cyanAccent, width: 1.5),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: Colors.redAccent, width: 1.2),
+              ),
+              errorText: _messageError(),
+              errorStyle: const TextStyle(fontSize: 11),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.info_outline_rounded, size: 12, color: Colors.white.withValues(alpha: 0.35)),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  'Embedded via OP_RETURN — permanent and visible to anyone. Please keep it civil.',
+                  style: TextStyle(fontSize: 10.5, color: Colors.white.withValues(alpha: 0.4), fontStyle: FontStyle.italic),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
