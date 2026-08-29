@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -93,6 +94,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   late TabController _tabController;
   final TextEditingController _toController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
+  final TextEditingController _messageController = TextEditingController();
   late Timer _priceUpdateTimer;
   PriceData? _priceData;
   bool _priceLoading = true;
@@ -179,6 +181,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     _tabController.dispose();
     _toController.dispose();
     _amountController.dispose();
+    _messageController.dispose();
     _addressDebounce?.cancel();
     super.dispose();
   }
@@ -1333,6 +1336,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
 
   Widget _buildSendTab(WalletProvider provider) {
     final amountErr = _amountError(provider);
+    final messageErr = _messageError();
     final feeSnapshot = _currentDisplayedFee(provider);
 
     return SingleChildScrollView(
@@ -1447,6 +1451,27 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               const SizedBox(height: 8),
               _buildFeeSourceSelector(provider),
 
+              const SizedBox(height: 20),
+              TextField(
+                controller: _messageController,
+                maxLines: 2,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  labelText: 'Message (optional)',
+                  hintText: 'Attached publicly on-chain via OP_RETURN',
+                  helperText:
+                      '${utf8.encode(_messageController.text).length}/80 bytes · visible to anyone on the blockchain',
+                  errorText: _messageError(),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.only(top: 4, left: 4),
+                child: Text(
+                  'Permanent and public — please keep it civil.',
+                  style: TextStyle(fontSize: 11, color: Colors.white38, fontStyle: FontStyle.italic),
+                ),
+              ),
+
               if (_advancedSend) ...[
                 const SizedBox(height: 32),
                 _buildUtxoSelector(provider),
@@ -1456,15 +1481,19 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               const SizedBox(height: 40),
 
               ElevatedButton(
-                  onPressed: provider.isLoading 
-                      || amountErr != null 
+                  onPressed: provider.isLoading
+                      || amountErr != null
+                      || messageErr != null
                       || _isValidatingAddress
-                      || _toController.text.trim().isEmpty    
-                      || _addressValid == false                
+                      || _toController.text.trim().isEmpty
+                      || _addressValid == false
                       ? null
                       : () async {
                           provider.clearMessage();
                           final enteredAmount = double.tryParse(_amountController.text.trim());
+                          final customMessage = _messageController.text.trim().isEmpty
+                              ? null
+                              : _messageController.text.trim();
                           if (enteredAmount != null) {
                             final liveFeeSnapshot = _currentDisplayedFee(provider);
                             final amount = _effectiveSendAmount(
@@ -1534,6 +1563,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                               estimatedFee: confirmFeeSnapshot.fee,
                               hasSelectedInputs: confirmFeeSnapshot.hasExactCoinControlFee,
                               subtractFeeFromAmount: _subtractFeeFromAmount,
+                              message: customMessage,
                             );
                             if (!preConfirm) return;
 
@@ -1542,6 +1572,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                               amount,
                               manualFeeRateCoinPerKb: feeRateCoinPerKvB,
                               preferBatchSend: preferBatchSend,
+                              message: customMessage,
                             );
 
                             if (result['success'] != true && result['requiresManualFee'] == true && mounted) {
@@ -1553,6 +1584,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                                   amount,
                                   manualFeeRateCoinPerKb: manualFeeRate,
                                   preferBatchSend: preferBatchSend,
+                                  message: customMessage,
                                 );
                                 if (retryResult['success'] == true) {
                                   _resetSendForm(provider);
@@ -1581,6 +1613,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                                     amount,
                                     manualFeeRateCoinPerKb: feeRateCoinPerKvB,
                                     preferBatchSend: true,
+                                    message: customMessage,
                                   );
                                   if (retryResult['success'] == true) {
                                     _resetSendForm(provider);
@@ -1621,6 +1654,12 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         ),
       ),
     );
+  }
+
+  String? _messageError() {
+    final byteLength = utf8.encode(_messageController.text).length;
+    if (byteLength > 80) return 'Message too long ($byteLength/80 bytes)';
+    return null;
   }
 
   String? _amountError(WalletProvider provider) {
@@ -1706,7 +1745,10 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     final enteredAmount = double.tryParse(_amountController.text.trim());
     final hasAmount = enteredAmount != null && enteredAmount > 0;
 
-    int txSizeForInputs(int inputs) => 10 + (inputs * 148) + (2 * 34);
+    final messageByteLength = utf8.encode(_messageController.text.trim()).length;
+    final opReturnOutputSize =
+        messageByteLength == 0 ? 0 : 9 + messageByteLength + (messageByteLength > 75 ? 1 : 0);
+    int txSizeForInputs(int inputs) => 10 + (inputs * 148) + (2 * 34) + opReturnOutputSize;
     double feeForInputs(int inputs) =>
         double.parse((feeRate * txSizeForInputs(inputs) / 1000).toStringAsFixed(8));
 
@@ -2037,6 +2079,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   void _resetSendForm(WalletProvider provider) {
     _toController.clear();
     _amountController.clear();
+    _messageController.clear();
     setState(() {
       _addressValid = null;
       _subtractFeeFromAmount = false;
@@ -2054,6 +2097,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     required double estimatedFee,
     required bool hasSelectedInputs,
     required bool subtractFeeFromAmount,
+    String? message,
   }) async {
     final feeSource = _feeSourceLabel(provider);
     final amountModeLabel = subtractFeeFromAmount
@@ -2169,6 +2213,29 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                 Text(
                   'Selected inputs: ${provider.selectedUtxoCount}',
                   style: const TextStyle(color: Colors.white70),
+                ),
+              ],
+              if (message != null && message.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.amberAccent.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.amberAccent.withValues(alpha: 0.4)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Message (permanent & public on-chain)',
+                        style: TextStyle(color: Colors.amberAccent, fontSize: 11, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(message, style: const TextStyle(color: Colors.white, fontSize: 13)),
+                    ],
+                  ),
                 ),
               ],
             ],

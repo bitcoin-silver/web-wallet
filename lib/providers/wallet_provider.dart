@@ -512,6 +512,7 @@ class WalletProvider with ChangeNotifier {
     double amount, {
     double? manualFeeRateCoinPerKb,
     bool preferBatchSend = true,
+    String? message,
   }) async {
     if (_wallet == null) {
       return {
@@ -553,7 +554,8 @@ class WalletProvider with ChangeNotifier {
           confirmedUtxos.length > _maxMigrationSweepInputs ||
               estimatedSweepVbytes > _maxMigrationSweepVbytes;
 
-      if (preferBatchSend && nearSweep && tooLargeForSingleSweep && confirmedUtxos.isNotEmpty) {
+      final hasMessage = message != null && message.trim().isNotEmpty;
+      if (!hasMessage && preferBatchSend && nearSweep && tooLargeForSingleSweep && confirmedUtxos.isNotEmpty) {
         final batchResult = await _sendSweepInBatches(
           toAddress,
           confirmedUtxos,
@@ -597,6 +599,7 @@ class WalletProvider with ChangeNotifier {
         amount,
         manualFeeRateCoinPerKb: manualFeeRateCoinPerKb,
         preSelectedUtxos: _selectedUtxoKeys.isNotEmpty ? selectedUtxoList : null,
+        message: message,
       );
     } catch (e) {
       _isLoading = false;

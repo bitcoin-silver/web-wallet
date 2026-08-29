@@ -144,6 +144,24 @@ import 'package:bip32/bip32.dart' as bip32;
     }
   }
 
+  // Builds an OP_RETURN scriptPubKey carrying arbitrary data (e.g. a text message).
+  // Standard relay policy caps OP_RETURN payloads at 80 bytes.
+  static Uint8List buildOpReturnScript(Uint8List data) {
+    if (data.length > 80) {
+      throw Exception('OP_RETURN payload exceeds 80 bytes (${data.length}).');
+    }
+    final builder = _BytesBuilder();
+    builder.writeByte(0x6a); // OP_RETURN
+    if (data.length <= 75) {
+      builder.writeByte(data.length); // direct push
+    } else {
+      builder.writeByte(0x4c); // OP_PUSHDATA1
+      builder.writeByte(data.length);
+    }
+    builder.writeBytes(data);
+    return builder.toBytes();
+  }
+
   static Uint8List _buildSegWitPreimage({
     required List<BTCSTxInput> inputs,
     required List<BTCSTxOutput> outputs,

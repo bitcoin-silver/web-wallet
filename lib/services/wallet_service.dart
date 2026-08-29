@@ -500,6 +500,7 @@ class WalletService {
     double amount, {
     double? manualFeeRateCoinPerKb,
     List<Map<String, dynamic>>? preSelectedUtxos,
+    String? message,
   }) async {
     int toSats(num coins) => (coins.toDouble() * 1e8).round();
     double toCoins(int sats) => sats / 1e8;
@@ -507,6 +508,27 @@ class WalletService {
       final feeCoins = feeRateCoinPerKb * vbytes / 1000;
       return toSats(feeCoins);
     }
+
+    // ── 0. Build optional OP_RETURN output for the custom message ──────────
+    Uint8List? opReturnScript;
+    final trimmedMessage = message?.trim();
+    if (trimmedMessage != null && trimmedMessage.isNotEmpty) {
+      final msgBytes = Uint8List.fromList(utf8.encode(trimmedMessage));
+      if (msgBytes.length > 80) {
+        return {
+          'success': false,
+          'message':
+              'Message too long (${msgBytes.length} bytes). Maximum is 80 bytes.',
+        };
+      }
+      try {
+        opReturnScript = BTCSSigner.buildOpReturnScript(msgBytes);
+      } catch (e) {
+        return {'success': false, 'message': 'Invalid message: $e'};
+      }
+    }
+    final int opReturnOutputSize =
+        opReturnScript == null ? 0 : 8 + 1 + opReturnScript.length;
 
     // ── 1. Get UTXOs ────────────────────────────────────────────────────────
     final allUtxos = await getUtxos(rpcUrl, rpcUser, rpcPassword, fromAddress);
@@ -606,8 +628,8 @@ class WalletService {
       final int destOutputSize = isDestLegacy ? 34 : 31;
       final int changeOutputSize = 31; 
       
-      int txSize = 11 + (inputCount * 68);
-      
+      int txSize = 11 + (inputCount * 68) + opReturnOutputSize;
+
       if (isSweep) {
         txSize += destOutputSize;
       } else {
@@ -658,6 +680,9 @@ class WalletService {
       // ── Build BTCSTxOutput list ────────────────────────────────────────
       final outputs = <BTCSTxOutput>[];
       try {
+        if (opReturnScript != null) {
+          outputs.add(BTCSTxOutput(scriptPubKey: opReturnScript, satoshis: 0));
+        }
         if (isSweep) {
           final sweepSats = inputSumSats - actualFeeSats;
           if (sweepSats <= 546) {
