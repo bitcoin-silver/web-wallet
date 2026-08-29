@@ -10,6 +10,19 @@ This project follows a release-oriented changelog style inspired by Keep a Chang
 
 - No unreleased changes yet.
 
+## [2.9]
+
+### Added
+
+- Optional on-chain message field in the Send flow, embedded via a standard OP_RETURN output (up to 80 bytes).
+- Live byte counter and validation for the message field, with clear warning that OP_RETURN data is permanent and publicly visible.
+- Message shown in the pre-send confirmation dialog so it's reviewed before broadcast.
+
+### Changed
+
+- Fee estimation and transaction sizing account for the extra OP_RETURN output when a message is attached.
+- Batch-sweep send path is skipped when a message is set, since a single message doesn't apply across multiple sweep transactions.
+
 ## [2.8]
 
 ### Added

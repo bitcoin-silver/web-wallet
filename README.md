@@ -22,8 +22,9 @@ A modern, secure, non-custodial, client-side signing wallet for the Bitcoin Silv
 
 For professional release tracking, detailed version history is maintained in [CHANGELOG.md](CHANGELOG.md).
 
-Latest major release: v2.8
+Latest major release: v2.9
 
+- Optional on-chain message on send, embedded via OP_RETURN (up to 80 bytes) with a byte counter and pre-send review.
 - Opt-in batch send flow for large transfers with clear user choice and preview.
 - Retry-as-batch option when normal single-transaction send fails under size or input constraints.
 - Batch migration consent flow with explicit multiple-TX explanation and safety warnings.
@@ -51,6 +52,7 @@ This version marks a major shift in our security model:
 - **Seed Phrase Wallet**: Modern 12/24 word recovery phrases (Recommended).
 - **Legacy WIF Wallet**: Support for existing raw Private Keys (WIF).
 - **Send/Receive**: Full transaction support with Bech32 (bs1...) addresses and QR codes.
+- **On-Chain Messages**: Attach an optional public note (up to 80 bytes) to a send via OP_RETURN.
 - **Coin Control**: Advanced UTXO selection for privacy and fee optimization.
 - **Glassmorphism UI**: A sleek, dark-themed interface with neon purple and gold accents.
 

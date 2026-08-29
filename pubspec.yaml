@@ -1,7 +1,7 @@
 name: btcs_web_wallet
 description: Simple Bitcoin Silver coin web wallet - Load, Send, Receive
 publish_to: "none"
-version: 2.8.0
+version: 2.9.0
 
 environment:
   sdk: ^3.5.1
