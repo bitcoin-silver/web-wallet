@@ -10,6 +10,7 @@ class StorageService {
   static const String _persistentSessionKey = '${_keyPrefix}persistent_session';
   static const String _persistentSessionEnabledKey = '${_keyPrefix}persistent_session_enabled';
   static const String _disclaimerAcceptedKey = '${_keyPrefix}disclaimer_accepted';
+  static const String _customRpcEndpointKey = '${_keyPrefix}rpc_endpoint';
 
   // Simple AES-like encryption using XOR with password hash
   String _encrypt(String data, String password) {
@@ -89,6 +90,31 @@ class StorageService {
     } catch (e) {
       return null;
     }
+  }
+
+  // Custom RPC endpoint: a device setting kept apart from wallet and session keys.
+  // Callers must validate what they read back (see RpcEndpointUrl).
+  bool saveCustomRpcEndpoint(String url) {
+    try {
+      web.window.localStorage.setItem(_customRpcEndpointKey, url);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  String? loadCustomRpcEndpoint() {
+    try {
+      return web.window.localStorage.getItem(_customRpcEndpointKey);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void clearCustomRpcEndpoint() {
+    try {
+      web.window.localStorage.removeItem(_customRpcEndpointKey);
+    } catch (_) {}
   }
 
   // Session storage (cleared when browser closes)

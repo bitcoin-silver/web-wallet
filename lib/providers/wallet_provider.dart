@@ -24,7 +24,7 @@ class WalletProvider with ChangeNotifier {
   bool _rememberSessionEnabled = false;
 
   // RPC Config
-  String _rpcUrl = 'https://bitcoinsilver.eu/btcs-rpc';
+  String _rpcUrl = Config.defaultRpcUrl;
   String _rpcUser = '';
   String _rpcPassword = '';
 
