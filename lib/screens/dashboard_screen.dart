@@ -3503,7 +3503,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         const SizedBox(height: 10),
         const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Text('BTCS Web-Wallet version 2.9 - Powered by Bitcoin Silver Core', 
+              child: Text('BTCS Web-Wallet version 3.0 - Powered by Bitcoin Silver Core', 
               style: TextStyle(color: Colors.white54, fontSize: 12),
               textAlign: TextAlign.center
         ),      
