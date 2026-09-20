@@ -117,7 +117,8 @@ If you host the wallet somewhere else, use that origin instead.
 ## Backup and portability
 
 - Back up your 12- or 24-word seed phrase, or your private key (WIF), offline. Anyone who has it controls the funds, and nobody can recover it for you.
-- Your seed phrase or private key is not tied to this website. It works in any wallet that supports BTCS, including Bitcoin Silver Core. Seed phrase wallets here use the first address of the BIP44 path `m/44'/0'/0'/0/0` (a native SegWit `bs1...` address), which is worth knowing when you restore elsewhere.
+- Your keys are not tied to this website. The private key (WIF) can be imported into Bitcoin Silver Core: see [IMPORT_KEY_INTO_CORE.md](IMPORT_KEY_INTO_CORE.md) (tested on Bitcoin Silver Core 31.1.3).
+- Bitcoin Silver Core does not import seed phrases. A seed phrase only works in wallets that derive keys the same way: the first address of the BIP44 path `m/44'/0'/0'/0/0` (a native SegWit `bs1...` address).
 - Step-by-step restore instructions for other wallets are not included yet.
 
 ## Technical Stack
