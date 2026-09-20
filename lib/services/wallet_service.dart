@@ -10,6 +10,7 @@ import 'package:base_x/base_x.dart';
 import 'package:bip39/bip39.dart' as bip39;
 import 'package:hex/hex.dart';
 import '../services/btcs_signer.dart';
+import '../services/fee_guard.dart';
 
 class WalletService {
   final BaseXCodec base58 = BaseXCodec('123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz');
@@ -395,7 +396,34 @@ class WalletService {
     return max(hardFloor, max(relayFee, max(incrementalFee, mempoolMinFee)));
   }
 
+  // Rates reported by the endpoint are untrusted: refuse anything above the
+  // fixed ceiling. Manual rates are checked right before signing.
   Future<Map<String, dynamic>> resolveFeeRate(
+    String rpcUrl,
+    String rpcUser,
+    String rpcPassword, {
+    double? manualFeeRateCoinPerKb,
+  }) async {
+    final result = await _resolveFeeRateUnchecked(
+      rpcUrl,
+      rpcUser,
+      rpcPassword,
+      manualFeeRateCoinPerKb: manualFeeRateCoinPerKb,
+    );
+    if (result['success'] == true && result['source'] != 'manual') {
+      final rate = (result['feeRate'] as num).toDouble();
+      if (FeeGuard.isRateAboveCeiling(rate)) {
+        return {
+          'success': false,
+          'reason': 'fee-rate-too-high',
+          'message': FeeGuard.rateAboveCeilingMessage(rate),
+        };
+      }
+    }
+    return result;
+  }
+
+  Future<Map<String, dynamic>> _resolveFeeRateUnchecked(
     String rpcUrl,
     String rpcUser,
     String rpcPassword, {
@@ -707,6 +735,18 @@ class WalletService {
         }
       } catch (e) {
         return {'success': false, 'message': 'Invalid destination address provided.'};
+      }
+
+      // ── Fee sanity check (independent of the endpoint) ─────────────────
+      // Change below dust is added to the fee, so the fee actually paid can
+      // exceed actualFeeSats by at most 546 sats.
+      final feeError = FeeGuard.check(
+        feeSats: actualFeeSats,
+        vbytes: txSize,
+        amountSats: isSweep ? inputSumSats - actualFeeSats : requestedAmountSats,
+      );
+      if (feeError != null) {
+        return {'success': false, 'message': feeError};
       }
 
       // ── Sign locally ───────────────────────────────────────────────────
