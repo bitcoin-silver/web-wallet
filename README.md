@@ -43,7 +43,7 @@ The wallet is a client-side app that runs in your browser.
 
 By default the wallet uses the project's RPC proxy, `https://bitcoinsilver.eu/btcs-rpc`. If you never open the setting, nothing changes.
 
-**How to change it.** Open **Server connection** on the start screen, or in **Settings** after loading a wallet. Enter the address of the server and press **Save**. **Reset to default** is always available. While a non-default server is in use, a **Custom server** badge is shown. The setting is stored in your browser, separately from your wallet data, and it can only be changed on this screen: not from links, query parameters or the URL hash.
+**How to change it.** Open **Server connection** on the start screen, or in **Settings** after loading a wallet. If loading a wallet stops because the server cannot be reached, a **Choose another server** button appears under the error. Enter the address of the server and press **Save**. **Reset to default** is always available. While a non-default server is in use, a **Custom server** badge is shown. The setting is stored in your browser, separately from your wallet data, and it can only be changed on this screen: not from links, query parameters or the URL hash.
 
 **Address rules**
 

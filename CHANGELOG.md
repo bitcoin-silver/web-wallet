@@ -15,6 +15,7 @@ This project follows a release-oriented changelog style inspired by Keep a Chang
 ### Added
 
 - "Server connection" setting to choose the RPC server the wallet uses, on the start screen and in Settings. It has a "Reset to default" button, and a "Custom server" badge is shown whenever a non-default server is in use.
+- A "Choose another server" button under the error when loading a wallet stops because the RPC server cannot be reached, so nobody is left without a way to change the server. The check itself is unchanged.
 - Checks before a custom server is saved: the address must be `https://` (`http://` only for `localhost` and `127.0.0.1`), and the server must answer like a node and report the Bitcoin Silver genesis block. If a check fails, the previous setting is kept and the reason is shown (unreachable, timed out, request refused, not a node, wrong network, or CORS).
 - Fixed fee limits that do not depend on the server: a fee rate above 0.01 BTCS/kvB is refused, and above 0.0004 BTCS/kvB the fee may not exceed 10% of the amount sent. If the server reports a rate above the limit, automatic fees count as unavailable and a manual fee can be entered.
 - Local mock RPC node (`tool/mock_rpc_server.mjs`) and browser tests that run against it.

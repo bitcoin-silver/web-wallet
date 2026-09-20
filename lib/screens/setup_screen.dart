@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/wallet_provider.dart';
 import '../theme/app_theme.dart';
+import '../widgets/rpc_endpoint_dialog.dart';
 
 class SetupScreen extends StatefulWidget {
   final bool useSeed;
@@ -155,6 +156,16 @@ class _SetupScreenState extends State<SetupScreen> {
                     ),
                     textAlign: TextAlign.center,
                   ),
+                  if (provider.rpcUnavailable) ...[
+                    const SizedBox(height: 8),
+                    Center(
+                      child: TextButton.icon(
+                        onPressed: () => showRpcEndpointDialog(context),
+                        icon: const Icon(Icons.dns_rounded, size: 16),
+                        label: const Text('Choose another server'),
+                      ),
+                    ),
+                  ],
                 ],
                 const SizedBox(height: 40),
                 const Text(

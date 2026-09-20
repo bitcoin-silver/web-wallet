@@ -34,7 +34,10 @@ class WalletProvider with ChangeNotifier {
   static const String _rpcPassword = '';
   int _endpointEpoch = 0; // bumped on every switch, to drop stale responses
   bool _isCheckingEndpoint = false;
+  // The last wallet load stopped because the server could not be reached.
+  bool _rpcUnavailable = false;
 
+  bool get rpcUnavailable => _rpcUnavailable;
   String get rpcUrl => _rpcUrl;
   bool get usingCustomEndpoint => !RpcEndpointUrl.isDefault(_rpcUrl);
   String get rpcHostLabel => RpcEndpointUrl.hostLabel(_rpcUrl);
@@ -469,6 +472,7 @@ class WalletProvider with ChangeNotifier {
     _feeSanityCeiling = null;
     _feeRateStatusMessage = 'Fee estimate not requested yet.';
     _message = '';
+    _rpcUnavailable = false;
     notifyListeners();
 
     unawaited(refreshBalance());
@@ -476,6 +480,7 @@ class WalletProvider with ChangeNotifier {
 
   void clearMessage() {
     _message = '';
+    _rpcUnavailable = false;
     notifyListeners();
   }
 
@@ -1156,6 +1161,7 @@ class WalletProvider with ChangeNotifier {
   }) async {
     _isLoading = true;
     _message = '⏳ Loading wallet...';
+    _rpcUnavailable = false;
     notifyListeners();
 
     // Give the UI a moment to render the spinner
@@ -1164,6 +1170,7 @@ class WalletProvider with ChangeNotifier {
     // 1. Validate the RPC Connection first
     if (!await _isRpcAvailable()) {
       _message = '❌ RPC Connection unavailable. Check your network.';
+      _rpcUnavailable = true;
       _isLoading = false;
       notifyListeners();
       return false;
@@ -1228,6 +1235,7 @@ class WalletProvider with ChangeNotifier {
   }) async {
     _isLoading = true;
     _message = '⏳ Loading wallet...';
+    _rpcUnavailable = false;
     notifyListeners();
 
     await Future.delayed(const Duration(milliseconds: 500));
@@ -1235,6 +1243,7 @@ class WalletProvider with ChangeNotifier {
     // 1. Validate the RPC Connection first
     if (!await _isRpcAvailable()) {
       _message = '❌ RPC Connection unavailable. Check your network.';
+      _rpcUnavailable = true;
       _isLoading = false;
       notifyListeners();
       return false;

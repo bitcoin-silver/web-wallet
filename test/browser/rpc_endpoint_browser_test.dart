@@ -18,6 +18,7 @@ import 'package:provider/provider.dart';
 import 'package:web/web.dart' as web;
 import 'package:btcs_web_wallet/config.dart';
 import 'package:btcs_web_wallet/providers/wallet_provider.dart';
+import 'package:btcs_web_wallet/screens/setup_screen.dart';
 import 'package:btcs_web_wallet/services/reachability_probe.dart';
 import 'package:btcs_web_wallet/services/rpc_endpoint_verifier.dart';
 import 'package:btcs_web_wallet/widgets/custom_endpoint_badge.dart';
@@ -188,6 +189,27 @@ void main() {
       final p = WalletProvider()..resetRpcEndpoint();
       expect(p.rpcUrl, Config.defaultRpcUrl);
     });
+
+    test('an unreachable default server stops loading, and choosing another clears it',
+        () => guarded(() async {
+              final p = WalletProvider();
+
+              // The guard client answers the default proxy with a 404 locally,
+              // which is what an unreachable server looks like to the wallet.
+              final loaded = await p.loadSeedWallet(senderMnemonic,
+                  persistSession: false, showLoadedMessage: false);
+              expect(loaded, isFalse);
+              expect(p.isLoaded, isFalse);
+              expect(p.message, contains('RPC Connection unavailable'));
+              expect(p.rpcUnavailable, isTrue);
+              expect(outside.any((u) => u.host == 'bitcoinsilver.eu'), isTrue,
+                  reason: 'the default proxy was the one that was tried');
+
+              // The way out: choose a working server. That clears the stop.
+              expect(await p.setCustomEndpoint('$mock/ok'), isNull);
+              expect(p.rpcUnavailable, isFalse);
+              expect(p.message, isEmpty);
+            }));
 
     test('entering the default address counts as a reset', () async {
       final p = WalletProvider();
@@ -414,6 +436,32 @@ void main() {
       expect(find.text('Reset to default'), findsOneWidget);
       expect(find.text('Save'), findsOneWidget);
       expect(find.textContaining('Using the default server'), findsOneWidget);
+    });
+
+    uiTest('the setup screen offers "Choose another server" when the server is unreachable',
+        (tester) async {
+      // The setup screen is taller than the default 800x600 test surface.
+      tester.view.physicalSize = const Size(900, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final p = WalletProvider();
+      await tester.pumpWidget(ChangeNotifierProvider.value(
+        value: p,
+        child: const MaterialApp(home: SetupScreen(useSeed: true)),
+      ));
+      expect(find.text('Choose another server'), findsNothing);
+
+      await tester.runAsync(() => guarded(() => p.loadSeedWallet(senderMnemonic,
+          persistSession: false, showLoadedMessage: false)));
+      await tester.pump();
+      expect(find.textContaining('RPC Connection unavailable'), findsOneWidget);
+      expect(find.text('Choose another server'), findsOneWidget);
+
+      await tester.tap(find.text('Choose another server'));
+      await tester.pumpAndSettle();
+      expect(find.text('Server connection'), findsOneWidget); // the dialog
+      expect(find.text(warning), findsOneWidget);
     });
 
     testWidgets('a rejected address shows a readable error and changes nothing',
