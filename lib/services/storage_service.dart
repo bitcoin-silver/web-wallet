@@ -65,33 +65,6 @@ class StorageService {
     web.window.localStorage.removeItem('${_keyPrefix}wallet');
   }
 
-  // Save RPC config
-  void saveRpcConfig(String url, String user, String password) {
-    final config = jsonEncode({
-      'url': url,
-      'user': user,
-      'password': password,
-    });
-    web.window.localStorage.setItem('${_keyPrefix}rpc', config);
-  }
-
-  // Load RPC config
-  Map<String, String>? loadRpcConfig() {
-    final config = web.window.localStorage.getItem('${_keyPrefix}rpc');
-    if (config == null) return null;
-
-    try {
-      final decoded = jsonDecode(config) as Map<String, dynamic>;
-      return {
-        'url': decoded['url'] as String,
-        'user': decoded['user'] as String,
-        'password': decoded['password'] as String,
-      };
-    } catch (e) {
-      return null;
-    }
-  }
-
   // Custom RPC endpoint: a device setting kept apart from wallet and session keys.
   // Callers must validate what they read back (see RpcEndpointUrl).
   bool saveCustomRpcEndpoint(String url) {
