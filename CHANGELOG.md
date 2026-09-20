@@ -10,6 +10,25 @@ This project follows a release-oriented changelog style inspired by Keep a Chang
 
 - No unreleased changes yet.
 
+## [3.0]
+
+### Added
+
+- "Server connection" setting to choose the RPC server the wallet uses, on the start screen and in Settings. It has a "Reset to default" button, and a "Custom server" badge is shown whenever a non-default server is in use.
+- Checks before a custom server is saved: the address must be `https://` (`http://` only for `localhost` and `127.0.0.1`), and the server must answer like a node and report the Bitcoin Silver genesis block. If a check fails, the previous setting is kept and the reason is shown (unreachable, timed out, request refused, not a node, wrong network, or CORS).
+- Fixed fee limits that do not depend on the server: a fee rate above 0.01 BTCS/kvB is refused, and above 0.0004 BTCS/kvB the fee may not exceed 10% of the amount sent. If the server reports a rate above the limit, automatic fees count as unavailable and a manual fee can be entered.
+- Local mock RPC node (`tool/mock_rpc_server.mjs`) and browser tests that run against it.
+
+### Changed
+
+- The default RPC server is unchanged and is used unless a custom one is saved. The setting is stored separately from wallet and session data, and it can only be changed from the settings screen (never from links, query parameters or the URL hash).
+- Content Security Policy: connections are allowed to any `https://` server and to `http://localhost` / `http://127.0.0.1` (needed for custom servers), `object-src 'none'` is added, and `script-src` no longer allows `unsafe-inline` or `unsafe-eval` (it allows `wasm-unsafe-eval` instead).
+- README: trust model, choosing a server, running your own server, the calls the wallet makes, and backup and portability. The wallet is described as community-built, and the claim that the server never sees balance information is corrected: it sees the addresses the wallet looks up.
+
+### Removed
+
+- The unused `btcs_rpc` browser-storage key is no longer read. Nothing in the app wrote it, but anything that could would have redirected the wallet without checks. The unused `RPC_*` entries are also gone from `dart_defines.json.example`.
+
 ## [2.9]
 
 ### Added
