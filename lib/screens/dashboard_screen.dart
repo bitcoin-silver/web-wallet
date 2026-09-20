@@ -12,6 +12,8 @@ import '../theme/app_theme.dart';
 import '../models/wallet_model.dart';
 import '../models/transaction_model.dart';
 import '../services/price_service.dart';
+import '../widgets/custom_endpoint_badge.dart';
+import '../widgets/rpc_endpoint_dialog.dart';
 import 'network_info_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -359,6 +361,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                   const Icon(Icons.circle, color: Colors.green, size: 8),
                   const SizedBox(width: 8),
                   const Text('Mainnet', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 8),
+                  const CustomEndpointBadge(),
                 ],
               ),
             ],
@@ -3424,6 +3428,18 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           ),
           title: const Text('Network'),
           subtitle: const Text('Mainnet (https://bitcoinsilver.top/)'),
+          trailing: const Icon(Icons.chevron_right_rounded),
+        ),
+        const Divider(),
+        ListTile(
+          onTap: () => showRpcEndpointDialog(context),
+          title: const Text('Server connection'),
+          subtitle: provider.usingCustomEndpoint
+              ? Text(
+                  'Custom server: ${provider.rpcHostLabel}',
+                  style: const TextStyle(color: Colors.orangeAccent),
+                )
+              : const Text('Default server'),
           trailing: const Icon(Icons.chevron_right_rounded),
         ),
         const Divider(),
