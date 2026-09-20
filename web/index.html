@@ -28,8 +28,11 @@
     content="https://raw.githubusercontent.com/bitcoin-silver/web-wallet/main/assets/og_image.png" />
 
   <!-- Security Headers -->
+  <!-- connect-src allows any https host because users can choose their own RPC
+       endpoint in Settings, plus http://localhost and http://127.0.0.1 for
+       people running their own node. -->
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://bitcoinsilver.top https://explorer.bitcoinsilver.top https://bitcoinsilver.eu https://www.gstatic.com https://fonts.gstatic.com https://fonts.googleapis.com https://api.livecoinwatch.com; base-uri 'self'; form-action 'self';">
+    content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; object-src 'none'; base-uri 'self'; form-action 'self';">
   <meta http-equiv="X-Content-Type-Options" content="nosniff">
   <meta name="referrer" content="strict-origin-when-cross-origin">
 
