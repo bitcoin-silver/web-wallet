@@ -10,6 +10,27 @@ This project follows a release-oriented changelog style inspired by Keep a Chang
 
 - No unreleased changes yet.
 
+## [3.1]
+
+Works together with Android wallet 6.4: both use the same payment requests and `.btcs` address book files.
+
+### Added
+
+- Address book: a "Contacts" tab (between Assets and Send) to save, edit, search and delete labelled addresses. Contacts are stored in this browser only, are shared by every wallet opened in it, and stay after logout. Addresses are checked with the same rules as the Android wallet, and a Bitcoin Silver `bs1` address is saved in lowercase.
+- Import and export of the address book as `.btcs` files, the same format as the Android wallet, so contacts can be moved between the two apps in both directions. On import, invalid contacts are skipped and known addresses get the label from the file. An incomplete or damaged file is refused and the address book is left unchanged. One exception: when the Android wallet saves over an older, longer export, part of the old file stays after the new content. If the new export is complete and its contact count matches, it is imported and the leftover part is ignored.
+- Send tab: a button that fills the recipient from the address book, the contact's name shown under the recipient address, and an offer to save a new recipient after a successful send. Each contact also has a "Send" button that opens the Send tab with the address filled in.
+- Payment requests on the Receive tab: enter an amount and an optional note, and the QR code becomes a `bitcoinsilver:` payment request (the same format the Android wallet uses, so its scanner can read it). "Copy Payment Link" copies a link such as `https://bitcoinsilver.top/web-wallet/#pay=...` and "Copy as Text" copies a message with the amount, address, note and link.
+- Paying a request: opening a payment link fills in the Send tab with the address and amount, after the wallet is unlocked if needed. Pasting a `bitcoinsilver:` request or a payment link into the recipient field does the same. A card shows the requested amount and note, and warns when the amount is changed. Nothing is sent without the usual confirmation, the note is never put in the on-chain message, and a link can only fill in the Send form: it cannot change any setting.
+
+### Changed
+
+- The mobile bottom bar uses a smaller label font so its five tabs fit on a 360px screen.
+- The version shown on the start, setup and settings screens now comes from one place (`Config.appVersion`).
+
+### Privacy
+
+- The payment request in a link sits after `#`, which browsers do not send to the server, and the wallet removes it from the address bar as soon as it has read it.
+
 ## [3.0]
 
 ### Added

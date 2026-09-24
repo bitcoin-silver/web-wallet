@@ -22,11 +22,12 @@ A community-built, non-custodial web wallet for the Bitcoin Silver network. Keys
 
 Detailed version history is in [CHANGELOG.md](CHANGELOG.md).
 
-Latest major release: v3.0
+Latest release: v3.1
 
-- Choose which RPC server the wallet uses ("Server connection"), with a "Reset to default" button and a badge while a custom server is active. See [Choosing a server](#choosing-a-server).
-- Fixed fee limits that do not depend on the server, so a wrong or dishonest server cannot make the wallet overpay.
-- README now describes what the wallet trusts, what it sends to which server, and how to run your own.
+- Address book: a Contacts tab to save and search labelled addresses, with `.btcs` import and export in the same format as the Android wallet. See [Address book](#address-book).
+- Payment requests: ask for an amount with a QR code, a link or a text message, and pay a request by opening its link or pasting it. See [Payment requests](#payment-requests).
+
+v3.0 added the choice of RPC server, fixed fee limits that do not depend on the server, and this README's description of what the wallet trusts.
 
 ## Trust model
 
@@ -120,6 +121,26 @@ If you host the wallet somewhere else, use that origin instead.
 - Your keys are not tied to this website. The private key (WIF) can be imported into Bitcoin Silver Core: see [IMPORT_KEY_INTO_CORE.md](IMPORT_KEY_INTO_CORE.md) (tested on Bitcoin Silver Core 31.1.3).
 - Bitcoin Silver Core does not import seed phrases. A seed phrase only works in wallets that derive keys the same way: the first address of the BIP44 path `m/44'/0'/0'/0/0` (a native SegWit `bs1...` address).
 - Step-by-step restore instructions for other wallets are not included yet.
+- The address book is not part of the wallet backup. Export it from the Contacts tab (a `.btcs` file) if you want to keep it.
+
+## Address book
+
+- The Contacts tab stores labelled addresses in this browser's local storage. They are not encrypted, are shared by every wallet opened in this browser, and stay after logout. Clearing the site's data removes them.
+- Export and import use `.btcs` files in the same format as the Android wallet, so contacts move between the two in both directions.
+- Import merges: new addresses are added, known addresses get the label from the file, and invalid contacts are skipped. A damaged or incomplete file is refused without changing anything. Exports made by Android wallet 6.3 or older can end with leftover data from an older file; these are still imported when the export itself is complete.
+
+## Payment requests
+
+A payment request is one line of text in the BIP21 style, the same one the Android wallet uses:
+
+```
+bitcoinsilver:bs1q...?amount=1.5&message=Invoice%2042
+```
+
+- **Request money** on the Receive tab: enter an amount and an optional note. The QR code then holds the request (the Android wallet's scanner reads it). "Copy Payment Link" gives a link such as `https://bitcoinsilver.top/web-wallet/#pay=...`, and "Copy as Text" gives a short message with the amount, address, note and link.
+- **Pay a request** by opening its link or pasting the request or link into the recipient field on the Send tab. If the wallet is locked, the request waits until it is unlocked. The web wallet has no camera scanner; scan request QR codes with the Android wallet.
+- A request only fills in the Send form. Nothing is sent without the usual review and confirmation, the note is shown to you but never written to the blockchain, and a link cannot change any setting.
+- Privacy: the request in a link comes after `#`, which browsers do not send to the web server, and the wallet removes it from the address bar as soon as it has read it. Anyone who sees the link itself sees the address, amount and note.
 
 ## Technical Stack
 
@@ -137,6 +158,8 @@ If you host the wallet somewhere else, use that origin instead.
 - **On-Chain Messages**: Attach an optional public note (up to 80 bytes) to a send via OP_RETURN.
 - **Coin Control**: Advanced UTXO selection for privacy and fee optimization.
 - **Choose your server**: Use the default RPC proxy or your own.
+- **Address Book**: Labelled contacts, stored in this browser, with `.btcs` import/export shared with the Android wallet.
+- **Payment Requests**: Request an amount by QR code, link or text; pay a request by opening its link or pasting it.
 - **Glassmorphism UI**: A sleek, dark-themed interface with neon purple and gold accents.
 
 ## Security Warning

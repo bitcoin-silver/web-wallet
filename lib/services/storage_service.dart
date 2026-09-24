@@ -11,6 +11,7 @@ class StorageService {
   static const String _persistentSessionEnabledKey = '${_keyPrefix}persistent_session_enabled';
   static const String _disclaimerAcceptedKey = '${_keyPrefix}disclaimer_accepted';
   static const String _customRpcEndpointKey = '${_keyPrefix}rpc_endpoint';
+  static const String _addressBookKey = '${_keyPrefix}addressbook_v1';
 
   // Simple AES-like encryption using XOR with password hash
   String _encrypt(String data, String password) {
@@ -88,6 +89,25 @@ class StorageService {
     try {
       web.window.localStorage.removeItem(_customRpcEndpointKey);
     } catch (_) {}
+  }
+
+  // Address book: device data shared by every wallet opened in this browser,
+  // like the Android app. Returns false when storage is blocked or full.
+  bool saveAddressBook(String json) {
+    try {
+      web.window.localStorage.setItem(_addressBookKey, json);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  String? loadAddressBook() {
+    try {
+      return web.window.localStorage.getItem(_addressBookKey);
+    } catch (_) {
+      return null;
+    }
   }
 
   // Session storage (cleared when browser closes)

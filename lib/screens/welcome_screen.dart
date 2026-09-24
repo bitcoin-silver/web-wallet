@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import '../config.dart';
+import 'package:provider/provider.dart';
 import 'setup_screen.dart';
+import '../services/payment_link_inbox.dart';
 import '../theme/app_theme.dart';
 import '../widgets/custom_endpoint_badge.dart';
 import '../widgets/footer_widget.dart';
@@ -28,6 +31,31 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     setState(() {
       _hasAgreed = agreed;
     });
+  }
+
+  Widget _buildPaymentRequestWaiting() {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 600),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.primaryColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.3)),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.request_quote_rounded, color: AppTheme.primaryColor),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'A payment request is waiting. Open your wallet to review it on the Send tab. '
+              'Nothing is sent without your confirmation.',
+              style: TextStyle(color: Colors.white70),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _openSetup(bool useSeed) {
@@ -99,6 +127,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                           ),
                         ),
                         const SizedBox(height: 20),
+                        if (context.watch<PaymentLinkInbox>().hasPending) ...[
+                          _buildPaymentRequestWaiting(),
+                          const SizedBox(height: 20),
+                        ],
                         if (_agreementGateEnabled) ...[
                           _buildDisclaimerSection(),
                           const SizedBox(height: 20),
@@ -145,7 +177,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                         const SizedBox(height: 4),
                         const Padding(
                                 padding: EdgeInsets.symmetric(horizontal: 16),
-                                child: Text('BTCS Web-Wallet version 3.0 - Powered by Bitcoin Silver Core', 
+                                child: Text('BTCS Web-Wallet version ${Config.appVersion} - Powered by Bitcoin Silver Core', 
                                 style: TextStyle(color: Colors.white54, fontSize: 12),
                                 textAlign: TextAlign.center
                           ),      

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../config.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/wallet_provider.dart';
@@ -169,7 +170,7 @@ class _SetupScreenState extends State<SetupScreen> {
                 ],
                 const SizedBox(height: 40),
                 const Text(
-                  'BTCS Web-Wallet version 3.0 - Powered by Bitcoin Silver Core',
+                  'BTCS Web-Wallet version ${Config.appVersion} - Powered by Bitcoin Silver Core',
                   style: TextStyle(color: Colors.white54, fontSize: 14),
                   textAlign: TextAlign.center,
                 ),

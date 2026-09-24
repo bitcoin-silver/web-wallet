@@ -20,11 +20,17 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.35.3"
+          # Same version as local development; pubspec.lock is resolved with it.
+          flutter-version: "3.47.5"
           channel: "stable"
 
       - name: Get dependencies
         run: flutter pub get
+
+      # Unit tests only (test/browser needs Chrome and a local mock node).
+      # A failing test stops the deploy, so the live site keeps the last good build.
+      - name: Run unit tests
+        run: flutter test test/*_test.dart
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5

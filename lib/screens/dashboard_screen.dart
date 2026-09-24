@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../config.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -11,7 +12,12 @@ import '../providers/wallet_provider.dart';
 import '../theme/app_theme.dart';
 import '../models/wallet_model.dart';
 import '../models/transaction_model.dart';
+import '../services/address_book.dart';
+import '../services/payment_link_inbox.dart';
+import '../services/payment_request.dart';
 import '../services/price_service.dart';
+import '../providers/address_book_provider.dart';
+import '../widgets/address_book_panel.dart';
 import '../widgets/custom_endpoint_badge.dart';
 import '../widgets/rpc_endpoint_dialog.dart';
 import 'network_info_screen.dart';
@@ -93,6 +99,13 @@ class SparklinePainter extends CustomPainter {
 class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProviderStateMixin {
   static const int _satsPerBtcs = 100000000;
 
+  // Tab order, shared by the sidebar, the bottom bar and the TabBarView.
+  static const int _tabAssets = 0;
+  static const int _tabContacts = 1;
+  static const int _tabSend = 2;
+  static const int _tabReceive = 3;
+  static const int _tabSettings = 4;
+
   late TabController _tabController;
   final TextEditingController _toController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
@@ -106,6 +119,14 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   bool? _addressValid; // null=unchecked/unknown, true=valid, false=invalid
   bool _isValidatingAddress = false;
   Timer? _addressDebounce;
+
+  // Payment request being paid on the Send tab (from a link or a pasted URI).
+  PaymentRequest? _activeRequest;
+  late final PaymentLinkInbox _paymentLinks;
+
+  // Receive tab: optional amount and note for a payment request.
+  final TextEditingController _requestAmountController = TextEditingController();
+  final TextEditingController _requestNoteController = TextEditingController();
 
   int _btcsToSats(double amount) => (amount * _satsPerBtcs).round();
   double _satsToBtcs(int sats) => sats / _satsPerBtcs;
@@ -155,16 +176,39 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _fetchPrice();
     _priceUpdateTimer = Timer.periodic(const Duration(minutes: 5), (_) => _fetchPrice());
     _amountController.addListener(() => setState(() {})); // triggers rebuild on type
     _tabController.addListener(() {
-      if (_tabController.index == 1) { // 1 = Send tab
+      if (_tabController.index == _tabSend) {
         final provider = context.read<WalletProvider>();
         provider.fetchFeeRate();
       }
     });
+    // A payment link may have been opened before the wallet was unlocked,
+    // or may arrive while it is open.
+    _paymentLinks = context.read<PaymentLinkInbox>();
+    _paymentLinks.addListener(_takePaymentLink);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _takePaymentLink());
+  }
+
+  void _takePaymentLink() {
+    if (!mounted) return;
+    final error = _paymentLinks.takeError();
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Payment link not used: $error'),
+        backgroundColor: Colors.red.shade800,
+      ));
+    }
+    final request = _paymentLinks.takeRequest();
+    if (request == null) return;
+    _applyPaymentRequest(request);
+    _tabController.index = _tabSend;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Payment request loaded. Check it before sending.'),
+    ));
   }
 
   Future<void> _fetchPrice() async {
@@ -184,6 +228,9 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     _toController.dispose();
     _amountController.dispose();
     _messageController.dispose();
+    _requestAmountController.dispose();
+    _requestNoteController.dispose();
+    _paymentLinks.removeListener(_takePaymentLink);
     _addressDebounce?.cancel();
     super.dispose();
   }
@@ -253,6 +300,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                           controller: _tabController,
                           children: [
                             _buildAssetsTab(wallet, provider),
+                            AddressBookPanel(onSend: _sendToContact),
                             _buildSendTab(provider),
                             _buildReceiveTab(wallet),
                             _buildSettingsTab(provider),
@@ -270,8 +318,13 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       bottomNavigationBar: MediaQuery.of(context).size.width <= 900
           ? TabBar(
               controller: _tabController,
+              // Five tabs must fit a 360px phone without truncating labels.
+              labelPadding: EdgeInsets.zero,
+              labelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+              unselectedLabelStyle: const TextStyle(fontSize: 11),
               tabs: const [
                 Tab(icon: Icon(Icons.account_balance_wallet_rounded), text: 'Assets'),
+                Tab(icon: Icon(Icons.contacts_rounded), text: 'Contacts'),
                 Tab(icon: Icon(Icons.send_rounded), text: 'Send'),
                 Tab(icon: Icon(Icons.qr_code_scanner_rounded), text: 'Receive'),
                 Tab(icon: Icon(Icons.settings_rounded), text: 'Settings'),
@@ -292,10 +345,11 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           children: [
             Image.asset('assets/logo_btcs.png', height: 200),
             const SizedBox(height: 60),
-            _buildSidebarItem(0, Icons.account_balance_wallet_rounded, 'Assets'),
-            _buildSidebarItem(1, Icons.send_rounded, 'Send'),
-            _buildSidebarItem(2, Icons.qr_code_scanner_rounded, 'Receive'),
-            _buildSidebarItem(3, Icons.settings_rounded, 'Settings'),
+            _buildSidebarItem(_tabAssets, Icons.account_balance_wallet_rounded, 'Assets'),
+            _buildSidebarItem(_tabContacts, Icons.contacts_rounded, 'Contacts'),
+            _buildSidebarItem(_tabSend, Icons.send_rounded, 'Send'),
+            _buildSidebarItem(_tabReceive, Icons.qr_code_scanner_rounded, 'Receive'),
+            _buildSidebarItem(_tabSettings, Icons.settings_rounded, 'Settings'),
             const Spacer(),
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -572,9 +626,9 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           const SizedBox(height: 16),
           Row(
             children: [
-              _buildActionButton(Icons.arrow_upward_rounded, 'Send', () => _tabController.index = 1, tooltip: 'Send coins'),
+              _buildActionButton(Icons.arrow_upward_rounded, 'Send', () => _tabController.index = _tabSend, tooltip: 'Send coins'),
               const SizedBox(width: 12),
-              _buildActionButton(Icons.arrow_downward_rounded, 'Receive', () => _tabController.index = 2, tooltip: 'Receive coins'),
+              _buildActionButton(Icons.arrow_downward_rounded, 'Receive', () => _tabController.index = _tabReceive, tooltip: 'Receive coins'),
             ],
           ),
         ],
@@ -1338,6 +1392,133 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     );
   }
 
+  // Live RPC validation of the recipient, debounced while typing. A pasted
+  // payment request (bitcoinsilver:...) is split into address and amount.
+  void _onRecipientChanged(String value) {
+    if (PaymentRequest.looksLikeUri(value)) {
+      try {
+        _applyPaymentRequest(PaymentRequest.fromText(value));
+        return;
+      } on FormatException catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.message),
+          backgroundColor: Colors.red.shade800,
+        ));
+      }
+    }
+    _addressDebounce?.cancel();
+    setState(() {
+      _addressValid = null;
+      _isValidatingAddress = value.isNotEmpty;
+      // The request card must never describe a different recipient.
+      if (_activeRequest != null &&
+          AddressBook.normalizeAddress(value) != _activeRequest!.address) {
+        _activeRequest = null;
+      }
+    });
+    if (value.isEmpty) return;
+    _addressDebounce = Timer(const Duration(milliseconds: 700), () async {
+      final valid = await context.read<WalletProvider>().validateAddress(value.trim());
+      if (!mounted || _toController.text != value) return;
+      setState(() {
+        _addressValid = valid;
+        _isValidatingAddress = false;
+      });
+    });
+  }
+
+  void _setRecipient(String address) {
+    _toController.text = address;
+    _onRecipientChanged(address);
+  }
+
+  // Fills the Send form from a request. Nothing is sent: the user still
+  // reviews and confirms. The request's note is only shown, never put in
+  // the on-chain message field.
+  void _applyPaymentRequest(PaymentRequest request) {
+    _setRecipient(request.address);
+    if (request.amountSats != null) {
+      _amountController.text = PaymentRequest.formatAmount(request.amountSats!);
+    }
+    setState(() => _activeRequest = request.isPlainAddress ? null : request);
+  }
+
+  Widget _buildActiveRequestCard(PaymentRequest request) {
+    final requested = request.amountSats;
+    final entered = PaymentRequest.parseAmount(_amountController.text);
+    final amountChanged = requested != null && entered != requested;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+      decoration: BoxDecoration(
+        color: AppTheme.primaryColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 2),
+            child: Icon(Icons.request_quote_rounded, color: AppTheme.primaryColor),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  requested == null
+                      ? 'Payment request'
+                      : 'Payment request: ${PaymentRequest.formatAmount(requested)} BTCS',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                if (request.label != null) ...[
+                  const SizedBox(height: 4),
+                  Text('To: ${request.label}', style: const TextStyle(color: Colors.white70)),
+                ],
+                if (request.message != null) ...[
+                  const SizedBox(height: 4),
+                  Text('Note: ${request.message}', style: const TextStyle(color: Colors.white70)),
+                ],
+                const SizedBox(height: 6),
+                Text(
+                  amountChanged
+                      ? 'The amount below differs from the requested amount.'
+                      : 'Check the address and amount before sending. The note is not sent.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: amountChanged ? Colors.amberAccent : Colors.white54,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close_rounded, size: 18),
+            tooltip: 'Dismiss request',
+            onPressed: () => setState(() => _activeRequest = null),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String? _recipientContactLabel() {
+    final contact = context.watch<AddressBookProvider>().find(_toController.text);
+    return contact == null ? null : 'Contact: ${contact.label}';
+  }
+
+  Future<void> _pickRecipientFromAddressBook() async {
+    final entry = await showAddressBookPicker(context);
+    if (entry == null || !mounted) return;
+    _setRecipient(entry.address);
+  }
+
+  void _sendToContact(AddressBookEntry entry) {
+    _setRecipient(entry.address);
+    _tabController.index = _tabSend;
+  }
+
   Widget _buildSendTab(WalletProvider provider) {
     final amountErr = _amountError(provider);
     final messageErr = _messageError();
@@ -1380,41 +1561,42 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               _buildFeeStateBanner(provider),
               const SizedBox(height: 16),
 
+              if (_activeRequest != null) ...[
+                _buildActiveRequestCard(_activeRequest!),
+                const SizedBox(height: 16),
+              ],
+
               // Address field with live RPC validation
               TextField(
                 controller: _toController,
-                onChanged: (value) {
-                  _addressDebounce?.cancel();
-                  setState(() {
-                    _addressValid = null;
-                    _isValidatingAddress = value.isNotEmpty;
-                  });
-                  if (value.isEmpty) return;
-                  _addressDebounce = Timer(const Duration(milliseconds: 700), () async {
-                    final valid = await provider.validateAddress(value.trim());
-                    setState(() {
-                      _addressValid = valid;
-                      _isValidatingAddress = false;
-                    });
-                  });
-                },
+                onChanged: _onRecipientChanged,
                 decoration: InputDecoration(
                   labelText: 'Recipient Address',
-                  hintText: 'bs1...',
-                  suffixIcon: _isValidatingAddress
-                      ? const Padding(
+                  hintText: 'bs1... or paste a bitcoinsilver: payment request',
+                  suffixIcon: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_isValidatingAddress)
+                        const Padding(
                           padding: EdgeInsets.all(12),
                           child: SizedBox(
                             width: 16, height: 16,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           ),
                         )
-                      : _addressValid == null
-                          ? null
-                          : Icon(
-                              _addressValid! ? Icons.check_circle : Icons.cancel,
-                              color: _addressValid! ? Colors.green : Colors.red,
-                            ),
+                      else if (_addressValid != null)
+                        Icon(
+                          _addressValid! ? Icons.check_circle : Icons.cancel,
+                          color: _addressValid! ? Colors.green : Colors.red,
+                        ),
+                      IconButton(
+                        icon: const Icon(Icons.contacts_rounded),
+                        tooltip: 'Choose from address book',
+                        onPressed: _pickRecipientFromAddressBook,
+                      ),
+                    ],
+                  ),
+                  helperText: _recipientContactLabel(),
                   errorText: _addressValid == false ? 'Invalid address' : null,
                 ),
               ),
@@ -1476,6 +1658,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                       ? null
                       : () async {
                           provider.clearMessage();
+                          final recipient = _toController.text.trim();
+                          final requestLabel = _activeRequest?.label;
                           final enteredAmount = double.tryParse(_amountController.text.trim());
                           final customMessage = _messageController.text.trim().isEmpty
                               ? null
@@ -1579,6 +1763,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                                       context,
                                       retryResult,
                                       requestedAmount: amount,
+                                      recipient: recipient,
+                                      suggestedLabel: requestLabel,
                                     );
                                   }
                                 }
@@ -1608,6 +1794,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                                         context,
                                         retryResult,
                                         requestedAmount: amount,
+                                        recipient: recipient,
+                                        suggestedLabel: requestLabel,
                                       );
                                     }
                                   }
@@ -1622,6 +1810,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                                   context,
                                   result,
                                   requestedAmount: amount,
+                                  recipient: recipient,
+                                  suggestedLabel: requestLabel,
                                 );
                               }
                             }
@@ -2169,6 +2359,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     _messageController.clear();
     setState(() {
       _addressValid = null;
+      _activeRequest = null;
       _subtractFeeFromAmount = false;
       if (_advancedSend) _advancedSend = false;
     });
@@ -2680,6 +2871,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     BuildContext context,
     Map<String, dynamic> result, {
     required double requestedAmount,
+    required String recipient,
+    String? suggestedLabel,
   }) async {
     final batchTxids = (result['batchTxids'] as List<dynamic>? ?? [])
         .map((e) => e.toString())
@@ -2696,15 +2889,77 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         totalFee: (result['fee'] as num?)?.toDouble() ?? 0.0,
         netAmount: (result['netAmount'] as num?)?.toDouble(),
       );
-      return;
+    } else {
+      await _showPostSendAckDialog(
+        context: context,
+        txid: (result['txid'] as String?) ?? '',
+        amount: requestedAmount,
+        fee: (result['fee'] as num?)?.toDouble() ?? 0.0,
+      );
     }
 
-    await _showPostSendAckDialog(
-      context: context,
-      txid: (result['txid'] as String?) ?? '',
-      amount: requestedAmount,
-      fee: (result['fee'] as num?)?.toDouble() ?? 0.0,
+    if (mounted) await _offerSaveRecipient(recipient, suggestedLabel: suggestedLabel);
+  }
+
+  // After a send to an address that is not in the address book, offer to
+  // save it. Skipped for addresses the book would reject anyway.
+  Future<void> _offerSaveRecipient(String address, {String? suggestedLabel}) async {
+    final book = context.read<AddressBookProvider>();
+    if (book.find(address) != null || !AddressBook.isValidAddress(address)) return;
+
+    final suggestion = suggestedLabel ?? '';
+    final labelController = TextEditingController(
+      text: suggestion.length <= AddressBook.maxLabelLength
+          ? suggestion
+          : suggestion.substring(0, AddressBook.maxLabelLength),
     );
+    String? error;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          void save() {
+            final result = book.addOrUpdate(label: labelController.text, address: address);
+            if (result != null) {
+              setDialogState(() => error = result);
+              return;
+            }
+            Navigator.pop(dialogContext);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Contact saved.'), duration: Duration(seconds: 2)),
+            );
+          }
+
+          return AlertDialog(
+            title: const Text('Save to address book?'),
+            content: SizedBox(
+              width: 440,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SelectableText(address,
+                      style: const TextStyle(fontFamily: 'monospace', fontSize: 13, color: Colors.white70)),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: labelController,
+                    autofocus: true,
+                    maxLength: AddressBook.maxLabelLength,
+                    onSubmitted: (_) => save(),
+                    decoration: InputDecoration(labelText: 'Label', counterText: '', errorText: error),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Not now')),
+              ElevatedButton(onPressed: save, child: const Text('Save')),
+            ],
+          );
+        },
+      ),
+    );
+    labelController.dispose();
   }
 
   Future<void> _showBatchSendAckDialog({
@@ -3364,52 +3619,163 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     );
   }
 
+  void _copyToClipboard(String text, String confirmation) {
+    Clipboard.setData(ClipboardData(text: text));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(confirmation), duration: const Duration(seconds: 2)),
+    );
+  }
+
   Widget _buildReceiveTab(WalletModel wallet) {
+    final amountText = _requestAmountController.text.trim();
+    final amountSats = amountText.isEmpty ? null : PaymentRequest.parseAmount(amountText);
+    final amountInvalid = amountText.isNotEmpty && amountSats == null;
+    final note = _requestNoteController.text.trim();
+    // Same QR content as the Android wallet: the plain address, or a
+    // bitcoinsilver: URI when an amount or note is requested.
+    final request = PaymentRequest(
+      address: wallet.address,
+      amountSats: amountSats,
+      message: note.isEmpty ? null : note,
+    );
+    final isRequest = !request.isPlainAddress && !amountInvalid;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Center(
-        child: Column(
-          children: [
-            const Text('Receive BTCS', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 40),
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 600),
+          child: Column(
+            children: [
+              const Text('Receive BTCS', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 32),
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: QrImageView(
+                  data: isRequest ? request.toUri() : wallet.address,
+                  size: 260,
+                ),
               ),
-              child: QrImageView(
-                data: wallet.address,
-                size: 260,
+              const SizedBox(height: 12),
+              Text(
+                isRequest
+                    ? 'Payment request for ${amountSats == null ? 'any amount' : '${PaymentRequest.formatAmount(amountSats)} BTCS'}'
+                    : 'Scan to pay this address',
+                style: const TextStyle(color: Colors.white54),
               ),
-            ),
-            const SizedBox(height: 40),
-            const Text('Your Address', style: TextStyle(color: Colors.white54)),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.white10),
+              const SizedBox(height: 28),
+              const Text('Your Address', style: TextStyle(color: Colors.white54)),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: SelectableText(
+                  wallet.address,
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 16),
+                ),
               ),
-              child: SelectableText(
-                wallet.address,
-                style: const TextStyle(fontFamily: 'monospace', fontSize: 16),
+              const SizedBox(height: 12),
+              TextButton.icon(
+                onPressed: () => _copyToClipboard(wallet.address, 'Address copied to clipboard'),
+                icon: const Icon(Icons.copy_rounded),
+                label: const Text('Copy Address'),
               ),
-            ),
-            const SizedBox(height: 24),
-            TextButton.icon(
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: wallet.address));
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Address copied to clipboard'), duration: Duration(seconds: 2)),
-                );
-              },
-              icon: const Icon(Icons.copy_rounded),
-              label: const Text('Copy to Clipboard'),
-            ),
-          ],
+              const SizedBox(height: 24),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text('Request a payment',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Add an amount and a note, then share the QR code, the link or the text.',
+                        style: TextStyle(color: Colors.white54, fontSize: 13),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _requestAmountController,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        inputFormatters: [
+                          TextInputFormatter.withFunction((oldValue, newValue) {
+                            final text = newValue.text;
+                            if (text.isEmpty) return newValue;
+                            return RegExp(r'^\d*\.?\d{0,8}$').hasMatch(text) ? newValue : oldValue;
+                          }),
+                        ],
+                        onChanged: (_) => setState(() {}),
+                        decoration: InputDecoration(
+                          labelText: 'Amount (BTCS)',
+                          hintText: 'Optional',
+                          errorText: amountInvalid ? 'Enter an amount above 0' : null,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _requestNoteController,
+                        maxLength: PaymentRequest.maxMessageLength,
+                        onChanged: (_) => setState(() {}),
+                        decoration: const InputDecoration(
+                          labelText: 'Note for the payer',
+                          hintText: 'Optional, e.g. Invoice 42',
+                          counterText: '',
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        alignment: WrapAlignment.end,
+                        children: [
+                          if (isRequest)
+                            TextButton.icon(
+                              onPressed: () => setState(() {
+                                _requestAmountController.clear();
+                                _requestNoteController.clear();
+                              }),
+                              icon: const Icon(Icons.close_rounded, size: 18),
+                              label: const Text('Clear'),
+                            ),
+                          OutlinedButton.icon(
+                            onPressed: isRequest
+                                ? () => _copyToClipboard(request.toShareText(), 'Payment request text copied')
+                                : null,
+                            icon: const Icon(Icons.notes_rounded, size: 18),
+                            label: const Text('Copy as Text'),
+                          ),
+                          ElevatedButton.icon(
+                            onPressed: isRequest
+                                ? () => _copyToClipboard(request.webLink(), 'Payment link copied')
+                                : null,
+                            icon: const Icon(Icons.link_rounded, size: 18),
+                            label: const Text('Copy Payment Link'),
+                          ),
+                        ],
+                      ),
+                      if (isRequest) ...[
+                        const SizedBox(height: 12),
+                        const Text(
+                          'The link opens the BTCS web wallet with this request filled in. '
+                          'The note is only shown to the payer; it is not stored on the blockchain.',
+                          style: TextStyle(color: Colors.white38, fontSize: 12),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -3503,7 +3869,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         const SizedBox(height: 10),
         const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Text('BTCS Web-Wallet version 3.0 - Powered by Bitcoin Silver Core', 
+              child: Text('BTCS Web-Wallet version ${Config.appVersion} - Powered by Bitcoin Silver Core', 
               style: TextStyle(color: Colors.white54, fontSize: 12),
               textAlign: TextAlign.center
         ),      
