@@ -139,9 +139,9 @@ class PaymentRequest {
             throw FormatException('The requested amount "$value" is not valid.');
           }
         case 'message':
-          if (value.isNotEmpty) message = _clip(value);
+          message = _clip(value);
         case 'label':
-          if (value.isNotEmpty) label = _clip(value);
+          label = _clip(value);
         default:
           // BIP21: parameters starting with "req-" must be understood.
           if (key.startsWith('req-')) {
@@ -176,8 +176,27 @@ class PaymentRequest {
     return parse(decoded);
   }
 
-  static String _clip(String value) {
-    final oneLine = value.replaceAll(RegExp(r'[\r\n\t]+'), ' ');
-    return oneLine.length <= maxMessageLength ? oneLine : '${oneLine.substring(0, maxMessageLength)}…';
+  // Characters a request could use to make its text look different from what
+  // it is: control characters, direction overrides (e.g. U+202E, which shows
+  // text right-to-left) and invisible zero-width characters.
+  static final RegExp _hiddenChars = RegExp(
+    '[\u0000-\u001F\u007F-\u009F\u00AD\u061C\u180E\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF\uFFF9-\uFFFB]',
+  );
+
+  /// Text from a request (label, note) made safe to show: hidden and
+  /// direction-changing characters removed, whitespace collapsed to single
+  /// spaces. The text itself stays untrusted: it was written by whoever
+  /// made the request.
+  static String sanitizeText(String value) =>
+      value.replaceAll(_hiddenChars, ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+
+  static String? _clip(String value) {
+    final clean = sanitizeText(value);
+    if (clean.isEmpty) return null;
+    final runes = clean.runes;
+    // Count characters, not UTF-16 units, so an emoji is never cut in half.
+    return runes.length <= maxMessageLength
+        ? clean
+        : '${String.fromCharCodes(runes.take(maxMessageLength))}…';
   }
 }

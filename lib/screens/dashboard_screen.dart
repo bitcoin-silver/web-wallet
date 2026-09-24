@@ -1443,16 +1443,28 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     setState(() => _activeRequest = request.isPlainAddress ? null : request);
   }
 
+  // The label and note are written by whoever made the request, so they are
+  // shown as unverified. Only the address book can vouch for a name: it is
+  // shown when the address matches a saved contact, and a request that
+  // borrows a saved contact's name for another address gets a warning.
   Widget _buildActiveRequestCard(PaymentRequest request) {
     final requested = request.amountSats;
     final entered = PaymentRequest.parseAmount(_amountController.text);
     final amountChanged = requested != null && entered != requested;
+    final book = context.watch<AddressBookProvider>();
+    final savedContact = book.find(request.address);
+    final nameTwin = request.label == null ? null : book.findByLabel(request.label!);
+    final impersonates = nameTwin != null &&
+        AddressBook.normalizeAddress(nameTwin.address) != request.address;
+    // Skip the claimed name when it is simply the saved contact's own name.
+    final showClaimedName = request.label != null && (savedContact == null || nameTwin != savedContact);
+    final accent = impersonates ? Colors.redAccent : AppTheme.primaryColor;
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
       decoration: BoxDecoration(
-        color: AppTheme.primaryColor.withValues(alpha: 0.08),
+        color: accent.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.3)),
+        border: Border.all(color: accent.withValues(alpha: impersonates ? 0.7 : 0.3)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1472,19 +1484,43 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                       : 'Payment request: ${PaymentRequest.formatAmount(requested)} BTCS',
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
-                if (request.label != null) ...[
+                if (savedContact != null) ...[
                   const SizedBox(height: 4),
-                  Text('To: ${request.label}', style: const TextStyle(color: Colors.white70)),
+                  Row(
+                    children: [
+                      const Icon(Icons.verified_user_rounded, size: 14, color: Colors.greenAccent),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text('Saved contact: ${savedContact.label}',
+                            style: const TextStyle(color: Colors.greenAccent)),
+                      ),
+                    ],
+                  ),
+                ],
+                if (showClaimedName) ...[
+                  const SizedBox(height: 4),
+                  Text('Name given in the request (not verified): ${request.label}',
+                      style: const TextStyle(color: Colors.white70)),
+                ],
+                if (impersonates) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    '⚠ This request uses the name "${nameTwin.label}", but it is NOT the address you saved '
+                    'for ${nameTwin.label}. Do not pay unless you are sure who sent it.',
+                    style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600),
+                  ),
                 ],
                 if (request.message != null) ...[
                   const SizedBox(height: 4),
-                  Text('Note: ${request.message}', style: const TextStyle(color: Colors.white70)),
+                  Text('Note from the requester: ${request.message}',
+                      style: const TextStyle(color: Colors.white70)),
                 ],
                 const SizedBox(height: 6),
                 Text(
                   amountChanged
                       ? 'The amount below differs from the requested amount.'
-                      : 'Check the address and amount before sending. The note is not sent.',
+                      : 'Only pay requests from people you trust. Check the address and amount '
+                          'before sending. The note is not sent.',
                   style: TextStyle(
                     fontSize: 12,
                     color: amountChanged ? Colors.amberAccent : Colors.white54,
@@ -2907,7 +2943,10 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     final book = context.read<AddressBookProvider>();
     if (book.find(address) != null || !AddressBook.isValidAddress(address)) return;
 
-    final suggestion = suggestedLabel ?? '';
+    // The suggestion comes from the request. Never suggest a name that already
+    // belongs to another contact: that would save a look-alike entry.
+    final suggestion =
+        suggestedLabel == null || book.findByLabel(suggestedLabel) != null ? '' : suggestedLabel;
     final labelController = TextEditingController(
       text: suggestion.length <= AddressBook.maxLabelLength
           ? suggestion

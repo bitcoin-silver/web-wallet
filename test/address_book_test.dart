@@ -78,6 +78,15 @@ void main() {
     });
   });
 
+  test('findByLabel ignores case, spacing and invisible characters', () {
+    final book = AddressBook()..addOrUpdate(label: 'Alice Smith', address: legacy);
+    expect(book.findByLabel('alice smith')!.address, legacy);
+    expect(book.findByLabel('  ALICE   Smith ')!.address, legacy);
+    expect(book.findByLabel('Alice\u200B Smith')!.address, legacy);
+    expect(book.findByLabel('Alice S.'), isNull);
+    expect(book.findByLabel(''), isNull);
+  });
+
   test('find and remove match bech32 case-insensitively', () {
     final book = AddressBook()..addOrUpdate(label: 'Bob', address: bech32);
     expect(book.find(bech32.toUpperCase())!.label, 'Bob');
@@ -159,7 +168,7 @@ void main() {
 
     test('tolerates a byte order mark and stray NUL bytes', () {
       final book = AddressBook();
-      final result = book.importBtcs('﻿${androidExport([contact('Alice', legacy)])}\u0000');
+      final result = book.importBtcs('\uFEFF${androidExport([contact('Alice', legacy)])}\u0000');
       expect(result.success, isTrue);
     });
 

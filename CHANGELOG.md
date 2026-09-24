@@ -10,6 +10,16 @@ This project follows a release-oriented changelog style inspired by Keep a Chang
 
 - No unreleased changes yet.
 
+## [3.1.1]
+
+### Security
+
+- Payment requests: the name in a request is now shown as "Name given in the request (not verified)", because anyone can write any name into a link. When the address belongs to one of your saved contacts, the card says "Saved contact: …" instead, which only your address book can confirm.
+- A request that uses the name of a saved contact for a different address shows a red warning ("This request uses the name … but it is NOT the address you saved …").
+- Hidden characters are removed from a request's name and note before they are shown: control characters, invisible zero-width characters, and direction overrides such as U+202E that can make text read differently from what it is.
+- After a send, the "Save to address book?" offer no longer pre-fills a name from the request that already belongs to another contact.
+- The request card reminds you to pay only requests from people you trust.
+
 ## [3.1]
 
 Works together with Android wallet 6.4: both use the same payment requests and `.btcs` address book files.

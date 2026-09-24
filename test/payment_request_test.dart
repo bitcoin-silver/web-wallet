@@ -68,6 +68,32 @@ void main() {
       expect(r.label!.length, PaymentRequest.maxMessageLength + 1);
     });
 
+    test('hidden and direction-changing characters are removed from label and note', () {
+      // U+202E would show "gnp.exe" as "exe.png"; U+200B is an invisible space.
+      final r = PaymentRequest.parse('bitcoinsilver:$bech32'
+          '?label=${Uri.encodeComponent('Bi\u200Bnance\u202E support')}'
+          '&message=${Uri.encodeComponent('pay\u0007\u2066 now\uFEFF')}');
+      expect(r.label, 'Bi nance support');
+      expect(r.message, 'pay now');
+    });
+
+    test('a label or note that is only hidden characters is dropped', () {
+      final r =
+          PaymentRequest.parse('bitcoinsilver:$bech32?amount=1&label=%E2%80%AE%E2%80%8B&message=%20%0A');
+      expect(r.label, isNull);
+      expect(r.message, isNull);
+    });
+
+    test('shortening never cuts an emoji in half', () {
+      final long = '${'a' * 199}😀😀';
+      final r = PaymentRequest.parse('bitcoinsilver:$bech32?message=${Uri.encodeComponent(long)}');
+      expect(r.message, '${'a' * 199}😀…');
+    });
+
+    test('sanitizeText', () {
+      expect(PaymentRequest.sanitizeText('  a\t\tb\n\u202Ec  '), 'a b c');
+    });
+
     test('rejects bad addresses and amounts with readable messages', () {
       for (final bad in [
         'bitcoinsilver:',

@@ -22,7 +22,9 @@ A community-built, non-custodial web wallet for the Bitcoin Silver network. Keys
 
 Detailed version history is in [CHANGELOG.md](CHANGELOG.md).
 
-Latest release: v3.1
+Latest release: v3.1.1 (payment request safety: unverified names, look-alike contact warning, hidden characters removed)
+
+v3.1:
 
 - Address book: a Contacts tab to save and search labelled addresses, with `.btcs` import and export in the same format as the Android wallet. See [Address book](#address-book).
 - Payment requests: ask for an amount with a QR code, a link or a text message, and pay a request by opening its link or pasting it. See [Payment requests](#payment-requests).
@@ -139,6 +141,7 @@ bitcoinsilver:bs1q...?amount=1.5&message=Invoice%2042
 
 - **Request money** on the Receive tab: enter an amount and an optional note. The QR code then holds the request (the Android wallet's scanner reads it). "Copy Payment Link" gives a link such as `https://bitcoinsilver.top/web-wallet/#pay=...`, and "Copy as Text" gives a short message with the amount, address, note and link.
 - **Pay a request** by opening its link or pasting the request or link into the recipient field on the Send tab. If the wallet is locked, the request waits until it is unlocked. The web wallet has no camera scanner; scan request QR codes with the Android wallet.
+- Anyone can make a request with any name and note, so the wallet shows them as unverified. Only your address book vouches for a name ("Saved contact: …"), a request that borrows a saved contact's name for another address gets a warning, and hidden or direction-changing characters are removed before display. Pay only requests from people you trust.
 - A request only fills in the Send form. Nothing is sent without the usual review and confirmation, the note is shown to you but never written to the blockchain, and a link cannot change any setting.
 - Privacy: the request in a link comes after `#`, which browsers do not send to the web server, and the wallet removes it from the address bar as soon as it has read it. Anyone who sees the link itself sees the address, amount and note.
 

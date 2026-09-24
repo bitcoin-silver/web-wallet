@@ -18,6 +18,8 @@ class AddressBookProvider with ChangeNotifier {
 
   AddressBookEntry? find(String address) => _book.find(address);
 
+  AddressBookEntry? findByLabel(String label) => _book.findByLabel(label);
+
   // Applies [change] and persists it; restores the previous state if the
   // browser refuses the write, so the list never shows unsaved data.
   bool _commit(void Function() change) {

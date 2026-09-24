@@ -1,7 +1,7 @@
 class Config {
   // Shown on the start, setup and settings screens. Keep in step with
   // `version:` in pubspec.yaml and the CHANGELOG.
-  static const String appVersion = '3.1';
+  static const String appVersion = '3.1.1';
 
   // LiveCoinWatch API Configuration (Price Data Source)
   static const String liveCoinWatchUrl = 'https://api.livecoinwatch.com/coins/single';

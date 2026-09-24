@@ -91,6 +91,22 @@ class AddressBook {
     return _entries.indexWhere((e) => normalizeAddress(e.address) == normalized);
   }
 
+  /// Finds a contact by label, ignoring case, spacing and invisible
+  /// characters. Used to spot requests that borrow a saved contact's name.
+  AddressBookEntry? findByLabel(String label) {
+    final wanted = _labelKey(label);
+    if (wanted.isEmpty) return null;
+    for (final e in _entries) {
+      if (_labelKey(e.label) == wanted) return e;
+    }
+    return null;
+  }
+
+  static final RegExp _invisible = RegExp('[\u0000-\u001F\u007F-\u009F\u00AD\u061C\u180E\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]');
+
+  static String _labelKey(String label) =>
+      label.replaceAll(_invisible, '').replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
+
   AddressBookEntry? find(String address) {
     if (address.trim().isEmpty) return null;
     final index = _indexOf(address);
@@ -195,7 +211,7 @@ class AddressBook {
   /// label; new ones are appended. Invalid contacts are skipped. The book is
   /// left untouched when the file itself is rejected.
   AddressBookImportResult importBtcs(String content) {
-    final sanitized = content.replaceAll('\u0000', '').replaceFirst(RegExp(r'^﻿'), '').trim();
+    final sanitized = content.replaceAll('\u0000', '').replaceFirst(RegExp(r'^\uFEFF'), '').trim();
     Object? decoded;
     var ignoredTrailingData = false;
     try {
